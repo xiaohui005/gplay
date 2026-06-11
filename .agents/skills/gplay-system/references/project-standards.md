@@ -124,5 +124,5 @@
 | East Money API 不可达 | 采集/分析卡住 8s+ 后返回空 | 机器 IP 被 East Money 区域限制 | 切到 Sina K线 API |
 | 做T信号止损价高于买入价 | 盈亏比负数 | 下跌趋势中 MA20 > 当前价，止损取 MA20 导致在买入价之上 | 按趋势方向区分：上涨用 MA，下跌用 ATR，并强制 `stop < buy < sell` |
 | `Start-Process` 启动 `npx` 进程会立即退出 | 前端 dev server 启动后秒死 | `npx` 执行时需要下载/交互，Start-Process 的 Hidden 窗口不适合 | 直接用 `node_modules/.bin/vite` 路径绕过 npx |
-| 技术研判取到 K 线旧数据 | 买卖价远离现价 | `for k in klines: price = k["close"]` 遍历取到最后一条（最旧）数据，而 K 线按日期降序排列 | 用 `klines[0]["close"]` 取第一条（最新） |
+| 技术研判取到 K 线旧数据 | 买卖价远离现价 | K 线顺序与指标计算假设不一致，旧 close 被当成当前价 | 计算前按 `date` 升序排序，再用 `closes[-1]` / `klines[-1]["close"]` 取最新价 |
 | 做T买卖价远离现价 | 当前价 27.57 却给 17.x 买入价 | K 线顺序和指标计算方向不一致，旧价/旧均线被当成当前参考 | 做T内部按日期升序排序，并限制买入价贴近当前价 |
