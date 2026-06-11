@@ -300,36 +300,54 @@ def analyze_technical(klines: list[dict]) -> dict:
         stop_loss = max(stop_loss, sell_price * 1.03)
         buy_price = min(buy_price, sell_price * 0.995)
 
-    return {
+    return apply_confidence_floor(
+        direction=direction,
+        confidence=confidence,
+        recommendation=recommendation,
+        summary="；".join(summary_parts),
+        payload={
+            "signals": {
+                "buyPrice": buy_price,
+                "sellPrice": sell_price,
+                "stopLoss": stop_loss,
+            },
+            "keyEvidence": key_evidence,
+            "riskWarning": risk_warning,
+            "indicators": {
+                "trend": {
+                    "maAlignment": trend_status,
+                    "maCross": cross,
+                    "ma5": round(ma5, 2) if ma5 else None,
+                    "ma10": round(ma10, 2) if ma10 else None,
+                    "ma20": round(ma20, 2) if ma20 else None,
+                    "detail": trend_detail,
+                },
+                "momentum": {
+                    "macd": macd,
+                    "rsi": rsi,
+                },
+                "volatility": bb,
+                "volume": vol_analysis,
+                "supportResistance": sr,
+            },
+        },
+    )
+
+
+def apply_confidence_floor(direction: str, confidence: float, recommendation: str, summary: str, payload: dict | None = None) -> dict:
+    result = {
         "direction": direction,
         "confidence": confidence,
         "recommendation": recommendation,
-        "signals": {
-            "buyPrice": buy_price,
-            "sellPrice": sell_price,
-            "stopLoss": stop_loss,
-        },
-        "summary": "；".join(summary_parts),
-        "keyEvidence": key_evidence,
-        "riskWarning": risk_warning,
-        "indicators": {
-            "trend": {
-                "maAlignment": trend_status,
-                "maCross": cross,
-                "ma5": round(ma5, 2) if ma5 else None,
-                "ma10": round(ma10, 2) if ma10 else None,
-                "ma20": round(ma20, 2) if ma20 else None,
-                "detail": trend_detail,
-            },
-            "momentum": {
-                "macd": macd,
-                "rsi": rsi,
-            },
-            "volatility": bb,
-            "volume": vol_analysis,
-            "supportResistance": sr,
-        },
+        "summary": summary,
     }
+    if payload:
+        result.update(payload)
+    if direction in ("UP", "DOWN") and confidence < 55:
+        result["direction"] = "SIDEWAYS"
+        result["recommendation"] = "建议观望"
+        result["summary"] = f"信号强度不足，暂不做方向判断；{summary}"
+    return result
 
 
 def _empty_result(reason: str) -> dict:

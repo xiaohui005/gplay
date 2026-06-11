@@ -155,6 +155,24 @@ def _infer_analysis_session(created_at: datetime.datetime | None):
     return "MORNING" if created_at.time() < datetime.time(12, 0) else "AFTERNOON"
 
 
+def evaluate_prediction(predicted_direction: str, change_pct: float) -> dict:
+    if change_pct > 0.5:
+        actual = "UP"
+    elif change_pct < -0.5:
+        actual = "DOWN"
+    else:
+        actual = "SIDEWAYS"
+    if actual == "SIDEWAYS" and predicted_direction in ("UP", "DOWN"):
+        return {"actualDirection": actual, "isCorrect": None}
+    return {"actualDirection": actual, "isCorrect": actual == predicted_direction}
+
+
+def normalize_prediction_result(predicted_direction: str, actual_direction: str | None, is_correct: bool | None) -> dict:
+    if actual_direction == "SIDEWAYS" and predicted_direction in ("UP", "DOWN") and is_correct is False:
+        return {"actualDirection": actual_direction, "isCorrect": None}
+    return {"actualDirection": actual_direction, "isCorrect": is_correct}
+
+
 @router.get("/technical-analysis/history")
 def list_history(
     symbol: str = Query(None, description="股票代码"),
@@ -172,6 +190,10 @@ def list_history(
 
     now = datetime.datetime.now()
     for rec in records:
+        normalized = normalize_prediction_result(rec.predicted_direction, rec.actual_direction, rec.is_correct)
+        if normalized["isCorrect"] != rec.is_correct:
+            rec.is_correct = normalized["isCorrect"]
+            db.commit()
         if rec.is_correct is not None:
             continue
         if rec.created_at and (now - rec.created_at).total_seconds() < 3600:
@@ -184,14 +206,9 @@ def list_history(
         else:
             continue
         change_pct = (latest - rec.price_at_analysis) / rec.price_at_analysis * 100
-        if change_pct > 0.5:
-            actual = "UP"
-        elif change_pct < -0.5:
-            actual = "DOWN"
-        else:
-            actual = "SIDEWAYS"
-        rec.actual_direction = actual
-        rec.is_correct = (actual == rec.predicted_direction)
+        result = evaluate_prediction(rec.predicted_direction, change_pct)
+        rec.actual_direction = result["actualDirection"]
+        rec.is_correct = result["isCorrect"]
         rec.verified_at = now
         db.commit()
 
@@ -199,6 +216,7 @@ def list_history(
 
     verified = [r for r in records if r.is_correct is not None]
     correct_count = sum(1 for r in verified if r.is_correct)
+    neutral_count = sum(1 for r in records if r.actual_direction == "SIDEWAYS" and r.is_correct is None)
 
     return {
         "items": items,
@@ -209,6 +227,7 @@ def list_history(
             "totalRecords": total,
             "verifiedCount": len(verified),
             "correctCount": correct_count,
+            "neutralCount": neutral_count,
             "accuracy": round(correct_count / len(verified) * 100, 1) if verified else None,
         },
     }

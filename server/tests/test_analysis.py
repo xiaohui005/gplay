@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from src.main import app
 from src.models.stock_basic import StockBasic
 from src.models.stock_quote_snapshot import StockQuoteSnapshot
+from src.models.technical_record import TechnicalRecord
 from src.analysis.strategy_config import StrategyConfig, create_default_strategy
 from src.analysis.datatypes import (
     CapitalInput,
@@ -38,9 +39,60 @@ from src.analysis.risk_control import (
     SUGGESTION_HOLD,
 )
 from src.analysis.suggestion import map_suggestion
+from src.analysis.technical_engine import apply_confidence_floor
 from src.db.database import SessionLocal, engine, Base
+from src.handlers.technical_analysis import evaluate_prediction, normalize_prediction_result
 
 client = TestClient(app)
+
+
+def test_low_confidence_direction_becomes_sideways():
+    result = apply_confidence_floor(
+        direction="UP",
+        confidence=45,
+        recommendation="适合买入",
+        summary="综合研判：看涨↑，信心度45%",
+    )
+
+    assert result["direction"] == "SIDEWAYS"
+    assert result["recommendation"] == "建议观望"
+    assert "信号强度不足" in result["summary"]
+
+
+def test_sideways_result_does_not_count_as_wrong_for_directional_prediction():
+    result = evaluate_prediction(predicted_direction="UP", change_pct=0.1)
+
+    assert result["actualDirection"] == "SIDEWAYS"
+    assert result["isCorrect"] is None
+
+
+def test_legacy_sideways_wrong_result_is_reclassified_as_unverified():
+    result = normalize_prediction_result(
+        predicted_direction="DOWN",
+        actual_direction="SIDEWAYS",
+        is_correct=False,
+    )
+
+    assert result["actualDirection"] == "SIDEWAYS"
+    assert result["isCorrect"] is None
+
+
+def test_low_confidence_saved_record_displays_as_sideways():
+    record = TechnicalRecord(
+        symbol="000001",
+        name="平安银行",
+        price_at_analysis=10.0,
+        predicted_direction="DOWN",
+        confidence_score=39,
+        indicators_json=json.dumps({"_recommendation": "适合卖出"}, ensure_ascii=False),
+        summary="综合研判：看跌↓，信心度39%",
+    )
+
+    result = record.to_dict()
+
+    assert result["direction"] == "SIDEWAYS"
+    assert result["recommendation"] == "建议观望"
+    assert "信号强度不足" in result["summary"]
 
 
 @pytest.fixture(autouse=True)

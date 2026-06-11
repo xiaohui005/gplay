@@ -8,7 +8,7 @@ export default function AnalysisHistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [symbol, setSymbol] = useState(searchParams.get('symbol') || '')
   const [results, setResults] = useState<TechnicalAnalysisResult[]>([])
-  const [stats, setStats] = useState<{ totalRecords: number; verifiedCount: number; correctCount: number; accuracy: number | null } | null>(null)
+  const [stats, setStats] = useState<{ totalRecords: number; verifiedCount: number; correctCount: number; neutralCount?: number; accuracy: number | null } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -48,6 +48,7 @@ export default function AnalysisHistoryPage() {
           <span>总分析: {stats.totalRecords}</span>
           <span>已验证: {stats.verifiedCount}</span>
           <span>正确: {stats.correctCount}</span>
+          <span>未触发: {stats.neutralCount ?? 0}</span>
           <span>准确率: <b>{stats.accuracy != null ? `${stats.accuracy}%` : '--'}</b></span>
         </div>
       )}
@@ -80,9 +81,7 @@ export default function AnalysisHistoryPage() {
                 <td><span className={`ta-dir-${r.direction.toLowerCase()}`}>{dirMap[r.direction] || r.direction}</span></td>
                 <td>{r.confidence}%</td>
                 <td>{r.priceAtAnalysis}</td>
-                <td>
-                  {r.isCorrect === true ? <span className="ta-correct">✓ 正确</span> : r.isCorrect === false ? <span className="ta-wrong">✗ 错误</span> : <span className="dim">待验证</span>}
-                </td>
+                <td>{renderResult(r)}</td>
               </tr>
             ))}
           </tbody>
@@ -90,6 +89,13 @@ export default function AnalysisHistoryPage() {
       )}
     </div>
   )
+}
+
+function renderResult(result: TechnicalAnalysisResult) {
+  if (result.isCorrect === true) return <span className="ta-correct">✓ 命中</span>
+  if (result.isCorrect === false) return <span className="ta-wrong">✗ 未命中</span>
+  if (result.actualDirection === 'SIDEWAYS') return <span className="dim">盘整未触发</span>
+  return <span className="dim">待验证</span>
 }
 
 function getAnalysisTimeLabel(result: TechnicalAnalysisResult) {

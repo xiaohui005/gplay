@@ -226,6 +226,7 @@ export interface AnalysisHistoryResponse {
     totalRecords: number
     verifiedCount: number
     correctCount: number
+    neutralCount?: number
     accuracy: number | null
   }
 }

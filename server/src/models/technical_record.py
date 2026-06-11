@@ -32,20 +32,29 @@ class TechnicalRecord(Base):
         signals = indicators.pop("_signals", {"buyPrice": 0, "sellPrice": 0, "stopLoss": 0})
         analysis_session = indicators.pop("_analysisSession", None)
         analysis_time_label = indicators.pop("_analysisTimeLabel", None)
+        direction = self.predicted_direction
+        recommendation = recommendation
+        summary = self.summary
+        if direction in ("UP", "DOWN") and self.confidence_score < 55:
+            direction = "SIDEWAYS"
+            recommendation = "建议观望"
+            if not summary.startswith("信号强度不足"):
+                summary = f"信号强度不足，暂不做方向判断；{summary}"
+
         return {
             "id": self.id,
             "symbol": self.symbol,
             "name": self.name,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "priceAtAnalysis": self.price_at_analysis,
-            "direction": self.predicted_direction,
+            "direction": direction,
             "confidence": self.confidence_score,
             "recommendation": recommendation,
             "signals": signals,
             "indicators": indicators,
             "keyEvidence": key_evidence,
             "riskWarning": risk_warning,
-            "summary": self.summary,
+            "summary": summary,
             "isCorrect": self.is_correct,
             "actualDirection": self.actual_direction,
             "verifiedAt": self.verified_at.isoformat() if self.verified_at else None,
