@@ -14,6 +14,7 @@
 |---|---|---|
 | 后端 (FastAPI) | 8008 | |
 | 前端 (Vite dev) | 5173 | proxy /api → localhost:8008 |
+| 前端生产版 | 8008 | 后端直接托管 `frontend/dist`，无需常开 5173 |
 
 ## 命令
 
@@ -24,6 +25,7 @@
 | 启动前端 dev（Start-Process） | `frontend/` | `Start-Process -FilePath "node_modules/.bin/vite" -ArgumentList "--host","--port","5173"` |
 | 前端 TypeScript 检查 | `frontend/` | `npx tsc --noEmit` |
 | 前端生产打包 | `frontend/` | `npx tsc --noEmit; npx vite build` |
+| 后端托管前端 | `frontend/` + `server/` | 先 `npm run build`，再启动/重启后端，访问 `http://127.0.0.1:8008/` |
 | 运行后端测试 | `server/` | `python -m pytest` |
 | 运行单测文件 | `server/` | `python -m pytest tests/test_xxx.py -v` |
 | 种子数据 | `server/` | `python -m src.seed` |
@@ -50,7 +52,8 @@
 | GET | `/api/settings/notification` | 读取通知配置（Bark 配置） |
 | PUT | `/api/settings/notification` | 保存通知配置（Bark 启用、服务地址、Device Key） |
 | POST | `/api/settings/notification/test` | 发送 Bark 测试推送 |
-| GET | `/` | 服务信息（含可用端点列表） |
+| GET | `/api` | 服务信息（含可用端点列表） |
+| GET | `/` | 前端生产页面（返回 `frontend/dist/index.html`） |
 
 ## 数据源
 
@@ -72,10 +75,12 @@
 - BUY_LIGHT/BUY_WATCH 建议必须附带止损条件
 - data_sources 限流策略：腾讯接口不做控制，Sina 页间睡 0.5s，Sina K线无重试直接回调（East Money 区域不可达，已切换为 Sina）
 - East Money `push2his.eastmoney.com` / `push2.eastmoney.com` 在该环境不可达（`Remote end closed connection`），相关代码保留但标记废弃
-- 技术研判历史硬约束：每只股票每天最多 2 条，`09:30` 早盘研判 1 条、`14:30` 收盘前研判 1 条；同日同股票同时段再次保存只能更新原记录，不能新增重复记录
+- 技术研判历史硬约束：每只股票每天最多 2 条，`10:00` 早盘研判 1 条、`14:30` 收盘前研判 1 条；同日同股票同时段再次保存只能更新原记录，不能新增重复记录
 - 技术研判自动保存只针对关注列表 `user_watchlist`，不扫全市场；页面预览不入历史，点击保存或定时任务才写入历史
+- 技术研判历史验证口径：新增研判只返回 `UP`/`DOWN`；早盘 `10:00` 用当日收盘验证，收盘前 `14:30` 用次日 `10:00` 附近快照验证，缺少验证价保持 `待验证`；准确率只统计 `命中`/`未命中`
 - 技术研判/做T指标计算必须先将 K 线按 `date` 升序排序，再使用 `closes[-1]` 作为最新价；做T价位必须贴近当前价，不能用旧 MA 产生远离现价的买卖点
 - Bark 推送第一版只做配置页和测试推送，不自动根据行情/新闻/技术研判触发；配置保存在 `notification_config` 表，后端接口统一在 `/api/settings/notification` 下。
+- FastAPI 8008 直接托管前端生产包：`/assets/*` 返回静态资源，非 `/api/*` 路径回退到 `frontend/dist/index.html`，支持 React Router 深链接；服务信息改到 `/api`
 
 ## 前端关键文件
 

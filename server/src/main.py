@@ -1,9 +1,12 @@
 import logging
 import sys
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
@@ -29,6 +32,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 app = FastAPI(
     title="GPlay 股票智能研判 - 数据采集模块",
@@ -53,6 +57,11 @@ app.include_router(watchlist_router)
 app.include_router(t_analysis_router)
 app.include_router(technical_analysis_router)
 app.include_router(settings_router)
+app.mount(
+    "/assets",
+    StaticFiles(directory=str(FRONTEND_DIST / "assets"), check_dir=False),
+    name="assets",
+)
 
 task_scheduler = TaskScheduler()
 
@@ -74,8 +83,8 @@ def on_shutdown():
     task_scheduler.stop()
 
 
-@app.get("/")
-def root():
+@app.get("/api")
+def api_info():
     return {
         "service": "GPlay 股票智能研判",
         "version": "1.0.0",
@@ -98,6 +107,22 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/{full_path:path}")
+def serve_frontend(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+
+    index_file = FRONTEND_DIST / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+
+    return {
+        "service": "GPlay 股票智能研判",
+        "message": "前端 dist 不存在，请先在 frontend/ 执行 npm run build",
+        "api": "/api",
+    }
 
 
 def _register_collectors():
