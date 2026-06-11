@@ -15,6 +15,8 @@ h3 { font-size: 1.05rem; margin-bottom: 8px; color: #555; }
 .muted { color: #aaa; }
 .hint { text-align: center; color: #888; margin: 24px 0; }
 .error { color: #d32f2f; }
+.page-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-title-row h1 { margin-bottom: 16px; }
 
 /* 搜索 */
 .search-input {
@@ -223,4 +225,17 @@ h3 { font-size: 1.05rem; margin-bottom: 8px; color: #555; }
 .news-source { color: #1976d2; }
 .news-time { color: #999; }
 
+/* 设置页 */
+.settings-card { display: flex; flex-direction: column; gap: 12px; }
+.settings-check { display: flex; align-items: center; gap: 8px; color: #444; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; color: #555; font-size: 0.9rem; }
+.settings-input {
+  width: 100%; padding: 10px 12px; font-size: 0.95rem;
+  border: 1px solid #ddd; border-radius: 6px; outline: none;
+}
+.settings-input:focus { border-color: #1976d2; }
+.settings-actions { display: flex; gap: 8px; align-items: center; }
+.settings-btn { margin-left: 0; }
+.settings-message { font-size: 0.9rem; }
+.settings-message.success { color: #2e7d32; }
 

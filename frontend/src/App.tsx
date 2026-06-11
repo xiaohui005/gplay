@@ -3,6 +3,7 @@ import SearchPage from './pages/SearchPage'
 import DetailPage from './pages/DetailPage'
 import TechnicalAnalysisPage from './pages/TechnicalAnalysisPage'
 import AnalysisHistoryPage from './pages/AnalysisHistoryPage'
+import SettingsPage from './pages/SettingsPage'
 import './index.css'
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/stock/:symbol" element={<DetailPage />} />
         <Route path="/analysis/:symbol" element={<TechnicalAnalysisPage />} />
         <Route path="/analysis/history" element={<AnalysisHistoryPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </BrowserRouter>
   )

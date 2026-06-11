@@ -87,7 +87,10 @@ export default function SearchPage() {
 
   return (
     <div className="page search-page">
-      <h1>GPlay 股票智能研判</h1>
+      <div className="page-title-row">
+        <h1>GPlay 股票智能研判</h1>
+        <button className="back-btn" onClick={() => nav('/settings')}>配置</button>
+      </div>
 
       {/* 我的关注 */}
       {watchlist.length > 0 && (

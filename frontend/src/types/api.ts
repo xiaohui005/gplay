@@ -249,3 +249,15 @@ export interface NewsItem {
   contentSummary: string
   sentiment: 'positive' | 'negative' | 'neutral'
 }
+
+export interface NotificationSettings {
+  barkEnabled: boolean
+  barkServerUrl: string
+  barkDeviceKey: string
+}
+
+export interface SaveNotificationSettingsPayload {
+  barkEnabled: boolean
+  barkServerUrl: string
+  barkDeviceKey: string
+}

@@ -1,4 +1,4 @@
-import type { StockItem, StockQuote, AnalysisResult, WatchlistItem, TAnalysisResult, KlineBar, NewsItem, TechnicalAnalysisResult, AnalysisHistoryResponse } from '../types/api'
+import type { StockItem, StockQuote, AnalysisResult, WatchlistItem, TAnalysisResult, KlineBar, NewsItem, TechnicalAnalysisResult, AnalysisHistoryResponse, NotificationSettings, SaveNotificationSettingsPayload } from '../types/api'
 
 const BASE = '/api'
 
@@ -13,6 +13,19 @@ async function get<T>(path: string): Promise<T> {
 
 async function post<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: 'POST' })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`请求失败 ${res.status}: ${text}`)
+  }
+  return res.json()
+}
+
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`请求失败 ${res.status}: ${text}`)
@@ -84,4 +97,16 @@ export function getAnalysisHistory(symbol?: string, page = 1, limit = 20): Promi
   params.set('page', String(page))
   params.set('limit', String(limit))
   return get(`/stocks/technical-analysis/history?${params.toString()}`)
+}
+
+export function getNotificationSettings(): Promise<NotificationSettings> {
+  return get('/settings/notification')
+}
+
+export function saveNotificationSettings(payload: SaveNotificationSettingsPayload): Promise<NotificationSettings> {
+  return put('/settings/notification', payload)
+}
+
+export function testNotificationSettings(): Promise<{ status: string; message: string }> {
+  return post('/settings/notification/test')
 }
