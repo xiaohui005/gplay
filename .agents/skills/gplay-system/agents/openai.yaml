@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "GPlay 系统维护"
+  short_description: "GPlay 项目的系统级开发、维护、验收和标准沉淀总入口。"
+  default_prompt: "Use $gplay-system to work on the GPlay project with project-specific development, validation, and skill-standard workflows."
