@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { searchStocks, collectStock } from '../api/client'
-import type { StockItem } from '../types/api'
+import { searchStocks, collectStock, getWatchlist, addWatchlist, removeWatchlist } from '../api/client'
+import type { StockItem, WatchlistItem } from '../types/api'
 
 function isStockCode(s: string): boolean {
   return /^\d{6}$/.test(s)
@@ -15,6 +15,18 @@ export default function SearchPage() {
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const [collecting, setCollecting] = useState(false)
   const [collectMsg, setCollectMsg] = useState('')
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
+  const [watching, setWatching] = useState<Set<string>>(new Set())
+
+  const loadWatchlist = useCallback(async () => {
+    try {
+      const res = await getWatchlist()
+      setWatchlist(res.items)
+      setWatching(new Set(res.items.map(i => i.symbol)))
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { loadWatchlist() }, [loadWatchlist])
 
   const doSearch = useCallback(async (kw: string) => {
     if (!kw.trim()) {
@@ -49,6 +61,20 @@ export default function SearchPage() {
     }
   }, [keyword, doSearch])
 
+  const toggleFollow = useCallback(async (symbol: string) => {
+    try {
+      if (watching.has(symbol)) {
+        await removeWatchlist(symbol)
+        setWatching(prev => { const n = new Set(prev); n.delete(symbol); return n })
+        setWatchlist(prev => prev.filter(i => i.symbol !== symbol))
+      } else {
+        await addWatchlist(symbol)
+        setWatching(prev => { const n = new Set(prev); n.add(symbol); return n })
+        await loadWatchlist()
+      }
+    } catch { /* ignore */ }
+  }, [watching, loadWatchlist])
+
   useEffect(() => {
     clearTimeout(timer.current)
     if (keyword.trim().length < 2) {
@@ -62,6 +88,29 @@ export default function SearchPage() {
   return (
     <div className="page search-page">
       <h1>GPlay 股票智能研判</h1>
+
+      {/* 我的关注 */}
+      {watchlist.length > 0 && (
+        <div className="watchlist-panel">
+          <h3>我的关注 <span className="dim">({watchlist.length})</span></h3>
+          <div className="watchlist-items">
+            {watchlist.map(w => (
+              <div key={w.symbol} className="watchlist-item" onClick={() => nav(`/stock/${w.symbol}`)}>
+                <span className="wl-name">{w.name}</span>
+                <span className="wl-code dim">{w.symbol}</span>
+                <span className={`wl-price ${getColor(w.changePercent)}`}>
+                  {w.latestPrice != null ? w.latestPrice.toFixed(2) : '--'}
+                </span>
+                <span className={`wl-change ${getColor(w.changePercent)}`}>
+                  {w.changePercent != null ? `${w.changePercent >= 0 ? '+' : ''}${w.changePercent.toFixed(2)}%` : ''}
+                </span>
+                <button className="wl-unfollow" onClick={e => { e.stopPropagation(); toggleFollow(w.symbol) }}>✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <input
         className="search-input"
         placeholder="输入股票代码 / 名称 / 拼音（如 600000 / 浦发银行 / pfyh）"
@@ -98,6 +147,7 @@ export default function SearchPage() {
               <th>市场</th>
               <th>最新价</th>
               <th>涨跌幅</th>
+              <th style={{ width: 50 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -109,6 +159,15 @@ export default function SearchPage() {
                 <td>{s.latestPrice?.toFixed(2) ?? '--'}</td>
                 <td className={getColor(s.changePercent)}>
                   {s.changePercent != null ? `${s.changePercent >= 0 ? '+' : ''}${s.changePercent.toFixed(2)}%` : '--'}
+                </td>
+                <td>
+                  <button
+                    className={`follow-btn ${watching.has(s.symbol) ? 'following' : ''}`}
+                    onClick={e => { e.stopPropagation(); toggleFollow(s.symbol) }}
+                    title={watching.has(s.symbol) ? '取消关注' : '关注'}
+                  >
+                    {watching.has(s.symbol) ? '★' : '☆'}
+                  </button>
                 </td>
               </tr>
             ))}

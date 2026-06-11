@@ -114,3 +114,40 @@ h3 { font-size: 1.05rem; margin-bottom: 8px; color: #555; }
 }
 .collect-btn:hover { background: #1565c0; }
 .collect-btn:disabled { background: #90caf9; cursor: not-allowed; }
+
+/* 关注按钮（表格中） */
+.follow-btn {
+  background: none; border: none; font-size: 1.2rem; cursor: pointer;
+  padding: 2px 6px; color: #bbb; transition: color 0.2s;
+}
+.follow-btn:hover { color: #f57c00; }
+.follow-btn.following { color: #f57c00; }
+
+/* 关注按钮（工具栏中） */
+.toolbar .follow-btn {
+  font-size: 0.9rem; padding: 6px 12px; border: 1px solid #ddd;
+  border-radius: 6px; background: none; color: #555; margin-left: 0;
+}
+.toolbar .follow-btn.following { background: #fff3e0; border-color: #f57c00; color: #f57c00; }
+
+/* 关注面板 */
+.watchlist-panel {
+  background: #fff; border-radius: 10px; padding: 12px 16px;
+  margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.watchlist-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.watchlist-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 16px; background: #f5f5f5;
+  cursor: pointer; font-size: 0.85rem; transition: background 0.15s;
+}
+.watchlist-item:hover { background: #e3f2fd; }
+.wl-name { font-weight: 600; }
+.wl-code { font-size: 0.75rem; }
+.wl-price { font-weight: 700; }
+.wl-change { font-size: 0.8rem; }
+.wl-unfollow {
+  background: none; border: none; cursor: pointer; font-size: 0.75rem;
+  color: #ccc; padding: 0 2px; line-height: 1;
+}
+.wl-unfollow:hover { color: #d32f2f; }

@@ -84,3 +84,12 @@ export interface AnalysisResult {
   masterGuidance: MasterGuidance
   disclaimer: string
 }
+
+export interface WatchlistItem {
+  symbol: string
+  name: string
+  market: string
+  latestPrice: number | null
+  changePercent: number | null
+  addedAt: string | null
+}

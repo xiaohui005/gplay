@@ -5,6 +5,7 @@ from src.models.raw_market_data import RawMarketData
 from src.models.stock_basic import StockBasic
 from src.models.stock_quote_snapshot import StockQuoteSnapshot
 from src.analysis.strategy_config import StrategyConfig, AnalysisResult
+from src.models.user_watchlist import UserWatchlist
 
 __all__ = [
     "DataSourceConfig",
@@ -15,4 +16,5 @@ __all__ = [
     "StockQuoteSnapshot",
     "StrategyConfig",
     "AnalysisResult",
+    "UserWatchlist",
 ]

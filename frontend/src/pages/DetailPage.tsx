@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getQuote, getAnalysis, collectStock } from '../api/client'
+import { getQuote, getAnalysis, collectStock, addWatchlist, removeWatchlist, getWatchlist } from '../api/client'
 import type { StockQuote, AnalysisResult } from '../types/api'
 
 export default function DetailPage() {
@@ -11,6 +11,14 @@ export default function DetailPage() {
   const [loading, setLoading] = useState(true)
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState('')
+  const [following, setFollowing] = useState(false)
+
+  useEffect(() => {
+    if (!symbol) return
+    getWatchlist().then(res => {
+      setFollowing(res.items.some(i => i.symbol === symbol))
+    }).catch(() => {})
+  }, [symbol])
 
   const fetchData = useCallback((sym: string) => {
     getQuote(sym).then(setQuote).catch(() => setQuote(null))
@@ -43,6 +51,19 @@ export default function DetailPage() {
     }
   }
 
+  const toggleFollow = async () => {
+    if (!symbol) return
+    try {
+      if (following) {
+        await removeWatchlist(symbol)
+        setFollowing(false)
+      } else {
+        await addWatchlist(symbol)
+        setFollowing(true)
+      }
+    } catch { /* ignore */ }
+  }
+
   if (loading) return <div className="page"><p className="hint">加载中...</p></div>
   if (!analysis) return (
     <div className="page detail-page">
@@ -63,6 +84,9 @@ export default function DetailPage() {
         <button className="back-btn" onClick={() => nav('/')}>← 返回搜索</button>
         <button className="collect-btn" onClick={handleCollect} disabled={collecting}>
           {collecting ? '采集中...' : '刷新数据'}
+        </button>
+        <button className={`follow-btn ${following ? 'following' : ''}`} onClick={toggleFollow}>
+          {following ? '★ 已关注' : '☆ 关注'}
         </button>
       </div>
 
