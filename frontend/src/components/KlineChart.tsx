@@ -122,7 +122,12 @@ export default function KlineChart({ data, days, onDaysChange }: Props) {
 
     return () => {
       resizeObserver.current?.disconnect()
-      chartRef.current?.remove()
+      if (chartRef.current) {
+        chartRef.current.remove()
+        chartRef.current = null
+        candleSeriesRef.current = null
+        volumeSeriesRef.current = null
+      }
     }
   }, [buildChart])
 

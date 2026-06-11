@@ -19,14 +19,15 @@
 
 | 动作 | 工作目录 | 命令 |
 |---|---|---|
-| 启动后端 | `server/` | `python -m src.main` |
-| 启动前端 dev | `frontend/` | `npx vite --host` |
+| 启动后端 | `server/` | `python -m uvicorn src.main:app --port 8008` |
+| 启动前端 dev（交互式终端） | `frontend/` | `npx vite --host` |
+| 启动前端 dev（Start-Process） | `frontend/` | `Start-Process -FilePath "node_modules/.bin/vite" -ArgumentList "--host","--port","5173"` |
 | 前端 TypeScript 检查 | `frontend/` | `npx tsc --noEmit` |
 | 前端生产打包 | `frontend/` | `npx tsc --noEmit; npx vite build` |
 | 运行后端测试 | `server/` | `python -m pytest` |
 | 运行单测文件 | `server/` | `python -m pytest tests/test_xxx.py -v` |
 | 种子数据 | `server/` | `python -m src.seed` |
-| 后端重启 | `server/` | 先 kill 旧进程，再 `python -m src.main` |
+| 后端重启 | `server/` | 先 kill 旧进程，再 `python -m uvicorn src.main:app --port 8008` |
 
 ## 后端关键端点
 
@@ -42,6 +43,7 @@
 | POST | `/api/watchlist/{symbol}` | 添加关注 |
 | DELETE | `/api/watchlist/{symbol}` | 取消关注 |
 | GET | `/api/stocks/search-full` | 管理后台全量搜索 |
+| GET | `/api/stocks/{symbol}/t-analysis` | 做T分析（评分 + Metrics + 信号） |
 | GET | `/` | 服务信息（含可用端点列表） |
 
 ## 数据源
@@ -50,7 +52,7 @@
 |---|---|---|
 | 实时行情 | Tencent Finance `qt.gtimg.cn` | `tencent_free` |
 | 股票列表 | Sina `vip.stock.finance.sina.com.cn` | `east_money_free` |
-| K线 | East Money `push2his.eastmoney.com` | `east_money_free` |
+| K线 | Sina `money.finance.sina.com.cn`（`scale=240` 日线） | `east_money_free` |
 | 新闻资讯 | East Money `push2.eastmoney.com/api/qt/stock/news/get` | `east_money_free` |
 
 ## 关键约定
@@ -62,7 +64,8 @@
 - 前端搜索页处理未入库股票：显示"数据库中暂无该股票" + 采集按钮
 - SUSPENDED/DELISTED 股票跳过评分，直接返回 HOLD/AVOID
 - BUY_LIGHT/BUY_WATCH 建议必须附带止损条件
-- data_sources 限流策略：腾讯接口不做控制，Sina 页间睡 0.5s，东方财富 K线 502 时重试
+- data_sources 限流策略：腾讯接口不做控制，Sina 页间睡 0.5s，Sina K线无重试直接回调（East Money 区域不可达，已切换为 Sina）
+- East Money `push2his.eastmoney.com` / `push2.eastmoney.com` 在该环境不可达（`Remote end closed connection`），相关代码保留但标记废弃
 
 ## 前端关键文件
 
@@ -72,7 +75,7 @@
 | `src/pages/DetailPage.tsx` | 详情页：行情头、K线图、评分网格、大师建议、买卖计划、相关资讯、采集/刷新按钮、关注按钮 |
 | `src/components/KlineChart.tsx` | K 线图表组件（lightweight-charts，支持周期切换，含成交量柱） |
 | `src/api/client.ts` | API 请求封装（get/post/del helper + searchStocks, getQuote, getAnalysis, getKline, getNews, collectStock, getWatchlist, addWatchlist, removeWatchlist）|
-| `src/types/api.ts` | TypeScript 类型定义（StockItem, StockQuote, AnalysisResult, ScoreBlock, MasterGuidance, WatchlistItem, KlineBar, NewsItem）|
+| `src/types/api.ts` | TypeScript 类型定义（StockItem, StockQuote, AnalysisResult, ScoreBlock, MasterGuidance, WatchlistItem, KlineBar, NewsItem, TMetrics, TLevels, TSignals, TAssessment, TAnalysisResult）|
 
 ## 数据模型
 
@@ -98,3 +101,12 @@
 | K线图表已在前端展示（lightweight-charts，支持20/60/120日切换） | 已完成 |
 | 个股新闻资讯已接入采集与展示 | 已完成 |
 | 生产 PostgreSQL 切换 | 简单（改 .env 的 DATABASE_URL）|
+
+## 已知工程陷阱
+
+| 问题 | 症状 | 原因 | 修复 |
+|---|---|---|---|
+| KlineChart 销毁后残留 ref | `Object is disposed` + 详情页白屏 | React StrictMode 双挂载时 useEffect cleanup 只调了 `remove()` 没置 null，第二次进入 buildChart 时 `chartRef.current.remove()` 对已销毁对象调用 | cleanup 中 `remove()` 后把所有 ref 置 null |
+| East Money API 不可达 | 采集/分析卡住 8s+ 后返回空 | 机器 IP 被 East Money 区域限制 | 切到 Sina K线 API |
+| 做T信号止损价高于买入价 | 盈亏比负数 | 下跌趋势中 MA20 > 当前价，止损取 MA20 导致在买入价之上 | 按趋势方向区分：上涨用 MA，下跌用 ATR，并强制 `stop < buy < sell` |
+| `Start-Process` 启动 `npx` 进程会立即退出 | 前端 dev server 启动后秒死 | `npx` 执行时需要下载/交互，Start-Process 的 Hidden 窗口不适合 | 直接用 `node_modules/.bin/vite` 路径绕过 npx |

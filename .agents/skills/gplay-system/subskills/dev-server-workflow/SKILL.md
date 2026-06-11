@@ -15,6 +15,7 @@ Use when:
 - 前后端联调时端口冲突或代理不生效
 - 交付前需要构建验证
 - 种子数据变动后需要重新播种
+- 前后端进程意外退出需要排查和恢复
 
 ## 标准流程
 
@@ -34,29 +35,47 @@ Use when:
 
 ### 2. 启动服务
 
+#### 2a. 交互式终端（推荐）
+
 ```powershell
 # 终端 1：后端
 cd D:\gongju\gplay\server
-python -m src.main
+python -m uvicorn src.main:app --port 8008
 
 # 终端 2：前端（开发模式，支持 HMR）
 cd D:\gongju\gplay\frontend
 npx vite --host
 ```
 
+#### 2b. 用 Start-Process 启动（后台进程，适合 OpenCode 自动操作）
+
+```powershell
+# 后端（带 --reload 无需每次重启）
+Start-Process -WindowStyle Hidden -FilePath python -ArgumentList "-m uvicorn src.main:app --reload --port 8008" -WorkingDirectory D:\gongju\gplay\server
+
+# 前端（注意：必须用 node_modules/.bin/vite，npx 下 Start-Process 会秒退）
+Start-Process -WindowStyle Hidden -FilePath "node_modules/.bin/vite" -ArgumentList "--host","--port","5173" -WorkingDirectory D:\gongju\gplay\frontend
+```
+
+#### 2c. 验证进程存活
+
+```powershell
+netstat -ano | Select-String ":8008.*LISTEN"
+netstat -ano | Select-String ":5173.*LISTEN"
+curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8008/
+curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:5173/
+
 ### 3. 重启后端
 
 ```powershell
-# 方式 A：按窗口标题杀死
-taskkill /F /FI "WINDOWTITLE eq 股票智能研判"
-# 方式 B：按端口杀死
-netstat -ano | findstr ":8008"
-# 取最后一列 PID，逐个 kill
-taskkill /F /PID <PID>
+# 方式 A：按端口杀掉
+netstat -ano | Select-String ":8008" | ForEach-Object { $parts = $_ -replace '\s+', ' ' -split ' '; $pid = $parts[-1]; if ($pid -match '^\d+$') { Stop-Process -Id $pid -Force; "Killed $pid" } }
 
 # 重新启动
-cd D:\gongju\gplay\server
-python -m src.main
+Start-Process -WindowStyle Hidden -FilePath python -ArgumentList "-m uvicorn src.main:app --reload --port 8008" -WorkingDirectory D:\gongju\gplay\server
+
+# 验证
+Start-Sleep 3; curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8008/
 ```
 
 ### 4. 验证服务
@@ -71,12 +90,32 @@ python -c "import urllib.request, json; r=urllib.request.urlopen('http://127.0.0
 # 验证研判接口
 python -c "import urllib.request, json; r=urllib.request.urlopen('http://127.0.0.1:8008/api/stocks/600000/analysis', timeout=5); d=json.loads(r.read()); print(d['suggestion'], d['score']['total'])"
 
+# 验证做T分析接口
+python -c "import urllib.request, json; r=urllib.request.urlopen('http://127.0.0.1:8008/api/stocks/603993/t-analysis', timeout=15); d=json.loads(r.read()); print(d['suitability'], d['score'], 'signals:', 'buyPrice' in d)"
+
 # 验证一键采集
 python -c "import urllib.request; req=urllib.request.Request('http://127.0.0.1:8008/api/stocks/601899/collect', method='POST'); r=urllib.request.urlopen(req, timeout=15); import json; d=json.loads(r.read()); print(d['status'], d['name'], d['price'])"
 
 # 验证前端代理
 python -c "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:5173/', timeout=5); print(r.status)"
-```
+
+# 验证前端详情页渲染（Playwright — 捕获 JS 错误）
+node -e @"
+const {chromium} = require('playwright');
+(async () => {
+  const b = await chromium.launch({headless:true});
+  const p = await b.newPage();
+  let errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  await p.goto('http://127.0.0.1:5173/stock/603993', {timeout:15000});
+  await p.waitForTimeout(8000);
+  const text = await p.textContent('body');
+  console.log('Has 做T分析:', text.includes('做T分析'));
+  console.log('Has 买入价:', text.includes('买入价'));
+  console.log('JS errors:', errs.length ? errs.join(' | ') : 'NONE');
+  await b.close();
+})().catch(e => console.error(e.message));
+"@
 
 ### 5. 构建验证（交付前）
 
@@ -167,3 +206,40 @@ python -c "import src; print(src.__file__)"
 原因：播种后未重启后端（SQLite 文件被覆写，但旧连接仍持有旧数据）。
 
 解决：先重启后端，再搜索。
+
+### 前端 dev server 启动后秒死
+
+原因：用 `Start-Process` 启动 `npx vite` 时，`npx` 的临时进程退出导致子进程被回收。
+
+解决：直接用 `node_modules/.bin/vite` 路径绕过 npx：
+```powershell
+Start-Process -WindowStyle Hidden -FilePath "node_modules/.bin/vite" -ArgumentList "--host","--port","5173" -WorkingDirectory D:\gongju\gplay\frontend
+```
+
+### KlineChart "Object is disposed"
+
+原因：React StrictMode 双挂载时 useEffect cleanup 只调了 `remove()` 没置 null。
+
+解决：cleanup 中 `remove()` 后把所有 ref 置 null：
+```typescript
+return () => {
+  if (chartRef.current) {
+    chartRef.current.remove()
+    chartRef.current = null
+    candleSeriesRef.current = null
+    volumeSeriesRef.current = null
+  }
+}
+```
+
+### 做T分析接口返回 UNSUITABLE score=0
+
+原因：East Money K线 API 区域不可达，3 次重试后返回空数据。
+
+解决：已切换到 Sina K线 API（`money.finance.sina.com.cn`），响应 <1s。
+
+### 使用 Start-Process 后进程存活但端口已被 TIME_WAIT 占用
+
+原因：PowerShell 的 Start-Process 无法等待进程启动完成；当上一进程刚 kill 时端口仍在 TIME_WAIT。
+
+解决：kill 后等 3-5 秒再启动，或换一个临时端口测试。

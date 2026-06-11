@@ -40,8 +40,12 @@ Act as the project maintainer for GPlay:
 
 4. **Validate**
    - Run targeted checks first, then broader checks when risk is higher.
-   - If frontend exists, build before handoff unless the user asks otherwise.
-   - If backend exists and the task affects backend behavior, restart backend after validation when the project has a known restart command.
+   - If frontend exists, **build** before handoff unless the user asks otherwise.
+   - If backend exists and the task affects backend behavior, **restart** backend after validation.
+   - **Verify servers actually accessible**: run `curl.exe` or `Invoke-WebRequest` to confirm both `:8008` and `:5173` return HTTP 200, not just that the process is listening.
+   - **Check page rendering**: use Playwright (`node -e "..."`) to open a key page (e.g. detail page) and verify no JS errors (`pageerror` events) and expected text exists.
+   - If any validation step fails, **do not mark done** — investigate and fix first.
+   - If a validation command cannot run (e.g. dependency missing), state the concrete reason.
 
 5. **Update standards**
    - If the same pattern appears at least twice, update `references/project-standards.md`.
@@ -73,9 +77,10 @@ Before saying work is complete:
 - State which files changed.
 - State which validation commands ran and their result.
 - If validation could not run, state the concrete reason.
-- If frontend exists, report build result.
+- If frontend exists, report build result (and whether dev server serves 200).
 - If backend exists and was restarted, report the restart command/result.
 - If new project knowledge was discovered, state whether the skill references were updated.
+- **CRITICAL**: After any change that could affect page rendering, verify the running dev server serves the page without JS errors (`pageerror` events) using Playwright. Do not rely solely on build success.
 
 ## References
 

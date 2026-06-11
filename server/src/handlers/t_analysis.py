@@ -235,27 +235,35 @@ def t_analysis(symbol: str, db: Session = Depends(get_db)):
     elif vol_trend == "contracting":
         weaknesses.append("波动率呈收缩趋势，短线机会减少")
 
-    # 做T信号计算
-    buy_price = round(min(ma10, latest_close - atr) if ma10 else latest_close - atr, 2)
-    sell_price = round(max(ma5, latest_close + atr) if ma5 else latest_close + atr, 2)
-    stop_loss = round(ma20 if ma20 else latest_close - 2 * atr, 2) if latest_close else 0
+    # 做T信号计算（按趋势方向区分）
+    if latest_close >= (ma5 or latest_close):  # 上涨趋势：价格站上MA5
+        buy_price = round(min(ma10, latest_close - atr) if ma10 else latest_close - atr, 2)
+        sell_price = round(max(latest_close + atr * 0.5, ma5 or latest_close), 2)
+        stop_loss = round(min(ma20 if ma20 else latest_close, latest_close - atr * 1.5), 2)
+    else:  # 下跌趋势：价格在MA5下方
+        buy_price = round(latest_close - atr * 0.5, 2)
+        sell_price = round(min(ma5 or latest_close + atr, latest_close + atr * 0.5), 2)
+        stop_loss = round(min(buy_price * 0.98, latest_close - atr), 2)
+    # 确保止损价始终低于买入价，卖出价高于买入价
+    stop_loss = round(min(stop_loss, buy_price * 0.99), 2)
+    sell_price = max(sell_price, round(buy_price * 1.005, 2))  # 至少0.5%差价
 
     expected_profit = round(sell_price - buy_price, 2)
     expected_profit_pct = round(expected_profit / buy_price * 100, 2) if buy_price else 0
     risk_amount = round(buy_price - stop_loss, 2)
     risk_pct = round(risk_amount / buy_price * 100, 2) if buy_price else 0
-    reward_risk = round(expected_profit / risk_amount, 2) if risk_amount else 0
+    reward_risk = round(expected_profit / risk_amount, 2) if risk_amount > 0 else 0
 
     # 买入条件
     buy_conditions = []
     sell_conditions = []
     if score >= 35:
-        buy_conditions.append(f"价格回调至{buy_price}附近（参考MA10支撑）")
+        buy_conditions.append(f"价格回调至{buy_price}附近（参考{('MA10' if latest_close >= (ma5 or latest_close) else 'ATR下轨')}）")
         buy_conditions.append("观察分时图缩量止跌后介入")
         buy_conditions.append(f"止损设在{stop_loss}下方，跌破离场")
-        sell_conditions.append(f"反弹至{sell_price}附近（参考MA5压力）分批高抛")
+        sell_conditions.append(f"反弹至{sell_price}附近（参考{('MA5压力' if latest_close >= (ma5 or latest_close) else 'ATR上轨')}）分批高抛")
         sell_conditions.append("分时图放量冲高回落时果断卖出")
-        sell_conditions.append(f"预期收益 {expected_profit_pct}% / 风险 {risk_pct}%，盈亏比 {reward_risk}")
+        sell_conditions.append(f"预期收益 +{expected_profit_pct}% / 风险 {risk_pct}%，盈亏比 {reward_risk}")
     else:
         buy_conditions.append("当前不适合做T，观望为主")
         sell_conditions.append("有持仓可等待反弹至MA5附近减仓")
