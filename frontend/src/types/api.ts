@@ -163,4 +163,5 @@ export interface NewsItem {
   publishTime: string | null
   url: string
   contentSummary: string
+  sentiment: 'positive' | 'negative' | 'neutral'
 }

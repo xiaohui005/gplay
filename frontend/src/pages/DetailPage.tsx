@@ -329,7 +329,10 @@ export default function DetailPage() {
           <div className="news-list">
             {newsItems.map((n) => (
               <a key={n.id} className="news-item" href={n.url} target="_blank" rel="noopener noreferrer">
-                <div className="news-title">{n.title}</div>
+                <div className="news-title">
+                  <span className={`news-tag tag-${n.sentiment}`}>{SENTIMENT_LABELS[n.sentiment]}</span>
+                  {n.title}
+                </div>
                 <div className="news-meta">
                   <span className="news-source">{n.source}</span>
                   <span className="news-time">{formatTime(n.publishTime)}</span>
@@ -381,6 +384,12 @@ function getTSuitLabel(s: string): string {
     case 'GENERAL': return '一般'
     default: return '不适合'
   }
+}
+
+const SENTIMENT_LABELS: Record<string, string> = {
+  positive: '利好',
+  negative: '利空',
+  neutral: '中等',
 }
 
 function formatTime(t: string | null): string {

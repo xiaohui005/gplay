@@ -2,6 +2,7 @@ import datetime
 
 from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint
 from src.db.database import Base
+from src.utils.sentiment import classify_sentiment
 
 
 class StockNews(Base):
@@ -28,4 +29,5 @@ class StockNews(Base):
             "publishTime": self.publish_time.isoformat() if self.publish_time else None,
             "url": self.url or "",
             "contentSummary": self.content_summary or "",
+            "sentiment": classify_sentiment(self.title, self.content_summary or ""),
         }
