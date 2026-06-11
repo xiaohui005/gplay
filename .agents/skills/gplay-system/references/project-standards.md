@@ -26,6 +26,7 @@
 | 前端 TypeScript 检查 | `frontend/` | `npx tsc --noEmit` |
 | 前端生产打包 | `frontend/` | `npx tsc --noEmit; npx vite build` |
 | 后端托管前端 | `frontend/` + `server/` | 先 `npm run build`，再启动/重启后端，访问 `http://127.0.0.1:8008/` |
+| 一键隐藏重启后端 | 项目根目录 | 双击 `启动后端-隐藏.vbs`（完全无黑窗）或 `启动后端.bat`（快速调用 VBS 后退出） |
 | 运行后端测试 | `server/` | `python -m pytest` |
 | 运行单测文件 | `server/` | `python -m pytest tests/test_xxx.py -v` |
 | 种子数据 | `server/` | `python -m src.seed` |
