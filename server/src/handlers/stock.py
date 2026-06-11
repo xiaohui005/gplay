@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 
 from src.data_sources.tencent_quote import fetch_quote
 from src.data_sources.east_money import fetch_stock_list, fetch_kline
+from src.data_sources.east_money_news import fetch_news
 from src.db.database import get_db
-from src.models import StockBasic, StockQuoteSnapshot
+from src.models import StockBasic, StockQuoteSnapshot, StockKlineDaily, StockNews
 from src.services.stock_service import StockService
 
 router = APIRouter(prefix="/api/stocks", tags=["stock"])
@@ -35,7 +36,6 @@ def collect_stock(symbol: str, db: Session = Depends(get_db)):
             symbol=symbol, name=quote["name"], market=market,
             trade_status="TRADING", pinyin="",
         ))
-        exist = db.query(StockBasic).filter(StockBasic.symbol == symbol).first()
 
     db.add(StockQuoteSnapshot(
         symbol=symbol,
@@ -55,11 +55,56 @@ def collect_stock(symbol: str, db: Session = Depends(get_db)):
         quote_type="REALTIME",
     ))
 
+    kline_bars = 0
     try:
-        kline = fetch_kline(symbol)
-        has_kline = len(kline)
+        kline_data = fetch_kline(symbol)
+        for k in kline_data:
+            exists = db.query(StockKlineDaily).filter(
+                StockKlineDaily.symbol == symbol,
+                StockKlineDaily.trade_date == k["date"],
+            ).first()
+            if not exists:
+                db.add(StockKlineDaily(
+                    symbol=symbol,
+                    trade_date=k["date"],
+                    open=k["open"],
+                    high=k["high"],
+                    low=k["low"],
+                    close=k["close"],
+                    volume=k.get("volume"),
+                    amount=k.get("amount"),
+                ))
+        kline_bars = len(kline_data)
     except Exception:
-        has_kline = 0
+        pass
+
+    news_count = 0
+    try:
+        news_data = fetch_news(symbol)
+        for n in news_data:
+            pub_time = None
+            if n.get("publish_time"):
+                try:
+                    pub_time = datetime.datetime.fromisoformat(n["publish_time"].replace("T", " "))
+                except (ValueError, TypeError):
+                    pub_time = None
+            exists = db.query(StockNews).filter(
+                StockNews.symbol == symbol,
+                StockNews.title == n["title"],
+                StockNews.publish_time == pub_time,
+            ).first()
+            if not exists:
+                db.add(StockNews(
+                    symbol=symbol,
+                    title=n["title"],
+                    source=n.get("source"),
+                    publish_time=pub_time,
+                    url=n.get("url"),
+                    content_summary=n.get("content_summary"),
+                ))
+        news_count = len(news_data)
+    except Exception:
+        pass
 
     db.commit()
 
@@ -69,7 +114,8 @@ def collect_stock(symbol: str, db: Session = Depends(get_db)):
         "name": quote["name"],
         "price": quote["latest_price"],
         "changePercent": quote["change_percent"],
-        "klineBars": has_kline,
+        "klineBars": kline_bars,
+        "newsCount": news_count,
     }
 
 
@@ -93,6 +139,28 @@ def stock_quote(symbol: str, db: Session = Depends(get_db)):
     if result is None:
         raise HTTPException(status_code=404, detail=f"股票 {symbol} 行情数据未找到")
     return result
+
+
+@router.get("/{symbol}/kline")
+def stock_kline(
+    symbol: str,
+    days: int = Query(60, ge=5, le=500, description="查询最近 N 天"),
+    db: Session = Depends(get_db),
+):
+    service = StockService(db)
+    items = service.get_kline(symbol, days)
+    return {"symbol": symbol, "items": items}
+
+
+@router.get("/{symbol}/news")
+def stock_news(
+    symbol: str,
+    limit: int = Query(20, ge=1, le=50, description="返回条数"),
+    db: Session = Depends(get_db),
+):
+    service = StockService(db)
+    items = service.get_news(symbol, limit)
+    return {"symbol": symbol, "items": items}
 
 
 def _detect_market(code: str) -> str:

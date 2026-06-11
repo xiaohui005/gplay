@@ -1,4 +1,4 @@
-import type { StockItem, StockQuote, AnalysisResult, WatchlistItem } from '../types/api'
+import type { StockItem, StockQuote, AnalysisResult, WatchlistItem, TAnalysisResult, KlineBar, NewsItem } from '../types/api'
 
 const BASE = '/api'
 
@@ -42,7 +42,7 @@ export function getAnalysis(symbol: string, strategyVersion?: string): Promise<A
   return get(`/stocks/${symbol}/analysis${qs}`)
 }
 
-export function collectStock(symbol: string): Promise<{ status: string; symbol: string; name: string; price: number; changePercent: number; klineBars: number }> {
+export function collectStock(symbol: string): Promise<{ status: string; symbol: string; name: string; price: number; changePercent: number; klineBars: number; newsCount: number }> {
   return post(`/stocks/${symbol}/collect`)
 }
 
@@ -56,4 +56,16 @@ export function addWatchlist(symbol: string): Promise<{ status: string; message:
 
 export function removeWatchlist(symbol: string): Promise<{ status: string; message: string }> {
   return del(`/watchlist/${symbol}`)
+}
+
+export function getTAnalysis(symbol: string): Promise<TAnalysisResult> {
+  return get(`/stocks/${symbol}/t-analysis`)
+}
+
+export function getKline(symbol: string, days = 60): Promise<{ symbol: string; items: KlineBar[] }> {
+  return get(`/stocks/${symbol}/kline?days=${days}`)
+}
+
+export function getNews(symbol: string, limit = 20): Promise<{ symbol: string; items: NewsItem[] }> {
+  return get(`/stocks/${symbol}/news?limit=${limit}`)
 }

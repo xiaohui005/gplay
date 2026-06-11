@@ -42,3 +42,26 @@ class StockService:
         if not quote:
             return None
         return quote.to_dict()
+
+    def get_kline(self, symbol: str, days: int = 60) -> list[dict]:
+        from src.models.stock_kline_daily import StockKlineDaily
+        import datetime
+        cutoff = datetime.date.today() - datetime.timedelta(days=days)
+        rows = (
+            self.db.query(StockKlineDaily)
+            .filter(StockKlineDaily.symbol == symbol, StockKlineDaily.trade_date >= cutoff.isoformat())
+            .order_by(StockKlineDaily.trade_date.asc())
+            .all()
+        )
+        return [r.to_dict() for r in rows]
+
+    def get_news(self, symbol: str, limit: int = 20) -> list[dict]:
+        from src.models.stock_news import StockNews
+        rows = (
+            self.db.query(StockNews)
+            .filter(StockNews.symbol == symbol)
+            .order_by(StockNews.publish_time.desc().nullslast())
+            .limit(limit)
+            .all()
+        )
+        return [r.to_dict() for r in rows]

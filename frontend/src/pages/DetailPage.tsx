@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getQuote, getAnalysis, collectStock, addWatchlist, removeWatchlist, getWatchlist } from '../api/client'
-import type { StockQuote, AnalysisResult } from '../types/api'
+import { getQuote, getAnalysis, collectStock, addWatchlist, removeWatchlist, getWatchlist, getTAnalysis, getKline, getNews } from '../api/client'
+import type { StockQuote, AnalysisResult, TAnalysisResult, KlineBar, NewsItem } from '../types/api'
+import KlineChart from '../components/KlineChart'
 
 export default function DetailPage() {
   const { symbol } = useParams<{ symbol: string }>()
@@ -12,6 +13,11 @@ export default function DetailPage() {
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState('')
   const [following, setFollowing] = useState(false)
+  const [tAnalysis, setTAnalysis] = useState<TAnalysisResult | null>(null)
+
+  const [klineData, setKlineData] = useState<KlineBar[]>([])
+  const [klineDays, setKlineDays] = useState(60)
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([])
 
   useEffect(() => {
     if (!symbol) return
@@ -25,6 +31,9 @@ export default function DetailPage() {
     getAnalysis(sym)
       .then(setAnalysis)
       .catch((e) => setError(e instanceof Error ? e.message : '请求失败'))
+    getTAnalysis(sym).then(setTAnalysis).catch(() => {})
+    getKline(sym, 60).then(res => setKlineData(res.items)).catch(() => {})
+    getNews(sym).then(res => setNewsItems(res.items)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -43,13 +52,20 @@ export default function DetailPage() {
       const result = await collectStock(symbol)
       fetchData(symbol)
       alert(`采集完成: ${result.name} ${result.price} (${result.changePercent >= 0 ? '+' : ''}${result.changePercent.toFixed(2)}%)` +
-        (result.klineBars ? ` | K线 ${result.klineBars} 条` : ''))
+        (result.klineBars ? ` | K线 ${result.klineBars} 条` : '') +
+        (result.newsCount ? ` | 资讯 ${result.newsCount} 条` : ''))
     } catch (e) {
       setError(e instanceof Error ? e.message : '采集失败')
     } finally {
       setCollecting(false)
     }
   }
+
+  const handleKlineDays = useCallback((days: number) => {
+    if (!symbol) return
+    setKlineDays(days)
+    getKline(symbol, days).then(res => setKlineData(res.items)).catch(() => {})
+  }, [symbol])
 
   const toggleFollow = async () => {
     if (!symbol) return
@@ -106,6 +122,9 @@ export default function DetailPage() {
           <span className="dim">数据: {analysis.dataTime ?? '无'}</span>
         </div>
       </div>
+
+      {/* K 线图 */}
+      <KlineChart data={klineData} days={klineDays} onDaysChange={handleKlineDays} />
 
       {/* 风险等级 + 建议 */}
       <div className={`card suggestion-card level-${analysis.riskLevel?.toLowerCase()}`}>
@@ -217,6 +236,110 @@ export default function DetailPage() {
         </div>
       )}
 
+      {/* 做T分析 */}
+      {tAnalysis && (
+        <div className="card">
+          <h3>做T分析 <span className={`badge t-badge t-${tAnalysis.suitability.toLowerCase()}`}>{getTSuitLabel(tAnalysis.suitability)}</span></h3>
+          <p className="summary">{tAnalysis.assessment.summary}</p>
+
+          {/* 操作信号 */}
+          <div className="t-signal-box">
+            <div className="t-signal t-signal-buy">
+              <span className="t-signal-label">买入价</span>
+              <span className="t-signal-price">{tAnalysis.signals.buyPrice}</span>
+              <span className="t-signal-note">MA10支撑 / ATR下轨</span>
+            </div>
+            <div className="t-signal t-signal-sell">
+              <span className="t-signal-label">卖出价</span>
+              <span className="t-signal-price">{tAnalysis.signals.sellPrice}</span>
+              <span className="t-signal-note">MA5压力 / ATR上轨</span>
+            </div>
+            <div className="t-signal t-signal-loss">
+              <span className="t-signal-label">止损价</span>
+              <span className="t-signal-price">{tAnalysis.signals.stopLoss}</span>
+              <span className="t-signal-note">跌破离场</span>
+            </div>
+          </div>
+
+          <div className="t-signal-meta">
+            <span>预期收益 <b className="green">+{tAnalysis.signals.expectedProfitPct}%</b></span>
+            <span>风险 <b className="red">{tAnalysis.signals.riskPct}%</b></span>
+            <span>盈亏比 <b>{tAnalysis.signals.rewardRiskRatio}</b></span>
+          </div>
+
+          <div className="t-signal-detail">
+            <div className="t-signal-col">
+              <span className="t-signal-col-title t-positive">买入条件</span>
+              <ul>{tAnalysis.signals.buyConditions.map((c, i) => <li key={i}>{c}</li>)}</ul>
+            </div>
+            <div className="t-signal-col">
+              <span className="t-signal-col-title t-negative">卖出条件</span>
+              <ul>{tAnalysis.signals.sellConditions.map((c, i) => <li key={i}>{c}</li>)}</ul>
+            </div>
+          </div>
+
+          <div className="t-grid">
+            <div className="t-metric">
+              <span className="t-label">近10日振幅</span>
+              <span className="t-val">{tAnalysis.metrics.avgAmplitude10 != null ? `${tAnalysis.metrics.avgAmplitude10.toFixed(1)}%` : '--'}</span>
+            </div>
+            <div className="t-metric">
+              <span className="t-label">ATR</span>
+              <span className="t-val">{tAnalysis.metrics.atrPercent != null ? `${tAnalysis.metrics.atrPercent.toFixed(1)}%` : '--'}</span>
+            </div>
+            <div className="t-metric">
+              <span className="t-label">换手率</span>
+              <span className="t-val">{tAnalysis.metrics.turnoverRate != null ? `${tAnalysis.metrics.turnoverRate.toFixed(1)}%` : '--'}</span>
+            </div>
+            <div className="t-metric">
+              <span className="t-label">量比</span>
+              <span className="t-val">{tAnalysis.metrics.volumeRatio != null ? tAnalysis.metrics.volumeRatio.toFixed(1) : '--'}</span>
+            </div>
+          </div>
+          {tAnalysis.assessment.strengths.length > 0 && (
+            <div className="t-section">
+              <span className="t-positive">优势</span>
+              <ul>{tAnalysis.assessment.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+            </div>
+          )}
+          {tAnalysis.assessment.weaknesses.length > 0 && (
+            <div className="t-section">
+              <span className="t-negative">劣势</span>
+              <ul>{tAnalysis.assessment.weaknesses.map((w, i) => <li key={i}>{w}</li>)}</ul>
+            </div>
+          )}
+          <div className="t-section">
+            <span className="t-tip">建议</span>
+            <ul>{tAnalysis.assessment.suggestions.map((s, i) => <li key={i}>{s}</li>)}</ul>
+          </div>
+          <div className="t-levels">
+            <span>MA5: {tAnalysis.levels.ma5 ?? '--'}</span>
+            <span>MA10: {tAnalysis.levels.ma10 ?? '--'}</span>
+            <span>MA20: {tAnalysis.levels.ma20 ?? '--'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 相关资讯 */}
+      <div className="card">
+        <h3>相关资讯 {newsItems.length > 0 && <span className="dim">({newsItems.length})</span>}</h3>
+        {newsItems.length === 0 ? (
+          <p className="hint">暂无相关资讯</p>
+        ) : (
+          <div className="news-list">
+            {newsItems.map((n) => (
+              <a key={n.id} className="news-item" href={n.url} target="_blank" rel="noopener noreferrer">
+                <div className="news-title">{n.title}</div>
+                <div className="news-meta">
+                  <span className="news-source">{n.source}</span>
+                  <span className="news-time">{formatTime(n.publishTime)}</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* 免责声明 + 版本 */}
       <div className="card dim-card">
         <p className="disclaimer">{analysis.disclaimer}</p>
@@ -249,4 +372,32 @@ function getScoreColor(s: number): string {
   if (s >= 70) return 'green'
   if (s >= 50) return ''
   return 'red'
+}
+
+function getTSuitLabel(s: string): string {
+  switch (s) {
+    case 'HIGHLY_SUITABLE': return '非常适合'
+    case 'SUITABLE': return '适合'
+    case 'GENERAL': return '一般'
+    default: return '不适合'
+  }
+}
+
+function formatTime(t: string | null): string {
+  if (!t) return ''
+  try {
+    const d = new Date(t)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return '刚刚'
+    if (diffMin < 60) return `${diffMin}分钟前`
+    const diffHour = Math.floor(diffMin / 60)
+    if (diffHour < 24) return `${diffHour}小时前`
+    const diffDay = Math.floor(diffHour / 24)
+    if (diffDay < 7) return `${diffDay}天前`
+    return d.toLocaleDateString('zh-CN')
+  } catch {
+    return t
+  }
 }

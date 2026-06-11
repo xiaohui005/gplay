@@ -12,7 +12,7 @@ SINA_STOCK_LIST = (
     "?page={page}&num=100&sort=code&asc=1&node=hs_a&symbol=&_s_r_a=init"
 )
 
-# East Money K 线
+# East Money K 线（已废弃，改用 Sina）
 EM_KLINE = (
     "http://push2his.eastmoney.com/api/qt/stock/kline/get"
     "?fields1=f1,f2,f3,f4,f5"
@@ -22,9 +22,19 @@ EM_KLINE = (
     "&secid={secid}&beg={date_from}&end={date_to}"
 )
 
+SINA_KLINE = (
+    "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+    "CN_MarketData.getKLineData"
+    "?symbol={secid}&datalen={datalen}&scale=240&ma=no"
+)
+
 
 def _secid(symbol: str) -> str:
     return f"1.{symbol}" if symbol.startswith(("6", "9")) else f"0.{symbol}"
+
+
+def _sina_secid(symbol: str) -> str:
+    return f"sh{symbol}" if symbol.startswith(("6", "9")) else f"sz{symbol}"
 
 
 def fetch_stock_list() -> list[dict]:
@@ -69,29 +79,36 @@ def fetch_stock_list() -> list[dict]:
     return results
 
 
-def fetch_kline(symbol: str, date_from: str = "20260101", date_to: str = "20260611") -> list[dict]:
-    sid = _secid(symbol)
-    url = EM_KLINE.format(secid=sid, date_from=date_from, date_to=date_to)
+def fetch_kline(symbol: str, datalen: int = 120) -> list[dict]:
+    sid = _sina_secid(symbol)
+    url = SINA_KLINE.format(secid=sid, datalen=datalen)
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    resp = urllib.request.urlopen(req, timeout=15)
-    raw = resp.read().decode("utf-8")
-    body = json.loads(raw)
-    klines = body.get("data", {}).get("klines", [])
+    for attempt in range(3):
+        try:
+            resp = urllib.request.urlopen(req, timeout=15)
+            raw = resp.read().decode("utf-8")
+            items = json.loads(raw)
+            break
+        except Exception as e:
+            if attempt < 2:
+                logger.warning("K线 [%s] 第 %d 次失败: %s，重试...", symbol, attempt + 1, e)
+                time.sleep(1)
+            else:
+                logger.error("K线 [%s] 3次重试均失败: %s", symbol, e)
+                return []
     results = []
-    for line in klines:
-        parts = line.split(",")
-        if len(parts) < 6:
-            continue
+    for item in items:
         results.append({
-            "date": parts[0],
-            "open": _safe_float(parts, 1),
-            "close": _safe_float(parts, 2),
-            "high": _safe_float(parts, 3),
-            "low": _safe_float(parts, 4),
-            "volume": _safe_float(parts, 5),
-            "amount": _safe_float(parts, 6),
+            "date": item["day"],
+            "open": float(item["open"]),
+            "close": float(item["close"]),
+            "high": float(item["high"]),
+            "low": float(item["low"]),
+            "volume": float(item["volume"]),
+            "amount": None,
         })
-    logger.info("K线 [%s] %d 条", symbol, len(results))
+    results.reverse()
+    logger.info("K线 [%s] %d 条（来自Sina）", symbol, len(results))
     return results
 
 

@@ -34,7 +34,13 @@
 |---|---|---|
 | GET | `/api/stocks/search?keyword=...&limit=...` | 搜索股票（代码前缀/名称模糊/拼音模糊） |
 | GET | `/api/stocks/{symbol}/analysis` | 获取完整研判结果（评分、大师建议、条件、买卖计划、复盘） |
-| POST | `/api/stocks/{symbol}/collect` | 一键采集（腾讯行情 + 东方财富K线），直接写入标准表 |
+| POST | `/api/stocks/{symbol}/collect` | 一键采集（腾讯行情 + 东方财富K线 + 东方财富新闻），直接写入标准表 |
+| GET | `/api/stocks/{symbol}/quote` | 获取最新行情快照 |
+| GET | `/api/stocks/{symbol}/kline?days=60` | 获取K线数据（日K，含日期/OHLC/成交量/成交额） |
+| GET | `/api/stocks/{symbol}/news?limit=20` | 获取个股相关新闻资讯 |
+| GET | `/api/watchlist` | 获取关注列表（含最新价、涨跌幅） |
+| POST | `/api/watchlist/{symbol}` | 添加关注 |
+| DELETE | `/api/watchlist/{symbol}` | 取消关注 |
 | GET | `/api/stocks/search-full` | 管理后台全量搜索 |
 | GET | `/` | 服务信息（含可用端点列表） |
 
@@ -45,6 +51,7 @@
 | 实时行情 | Tencent Finance `qt.gtimg.cn` | `tencent_free` |
 | 股票列表 | Sina `vip.stock.finance.sina.com.cn` | `east_money_free` |
 | K线 | East Money `push2his.eastmoney.com` | `east_money_free` |
+| 新闻资讯 | East Money `push2.eastmoney.com/api/qt/stock/news/get` | `east_money_free` |
 
 ## 关键约定
 
@@ -61,10 +68,11 @@
 
 | 文件 | 用途 |
 |---|---|
-| `src/pages/SearchPage.tsx` | 搜索页：300ms 防抖、拼音支持、未入库一键采集 |
-| `src/pages/DetailPage.tsx` | 详情页：行情头、评分网格、大师建议、买卖计划、采集/刷新按钮 |
-| `src/api/client.ts` | API 请求封装（searchStocks, getQuote, getAnalysis, collectStock）|
-| `src/types/api.ts` | TypeScript 类型定义（StockItem, AnalysisResult, ScoreBlock, MasterGuidance）|
+| `src/pages/SearchPage.tsx` | 搜索页：300ms 防抖、拼音支持、未入库一键采集、关注面板、关注按钮 |
+| `src/pages/DetailPage.tsx` | 详情页：行情头、K线图、评分网格、大师建议、买卖计划、相关资讯、采集/刷新按钮、关注按钮 |
+| `src/components/KlineChart.tsx` | K 线图表组件（lightweight-charts，支持周期切换，含成交量柱） |
+| `src/api/client.ts` | API 请求封装（get/post/del helper + searchStocks, getQuote, getAnalysis, getKline, getNews, collectStock, getWatchlist, addWatchlist, removeWatchlist）|
+| `src/types/api.ts` | TypeScript 类型定义（StockItem, StockQuote, AnalysisResult, ScoreBlock, MasterGuidance, WatchlistItem, KlineBar, NewsItem）|
 
 ## 数据模型
 
@@ -72,8 +80,11 @@
 |---|---|
 | `stock_basic` | 股票基本信息（symbol, name, market, trade_status, pinyin, list_date, total_shares） |
 | `stock_quote_snapshot` | 行情快照（latest_price, change_percent, volume, amount, turnover_rate, volume_ratio 等） |
+| `stock_kline_daily` | 日K线数据（symbol, trade_date, open, high, low, close, volume, amount，唯一约束 symbol+trade_date） |
+| `stock_news` | 股票相关新闻（symbol, title, source, publish_time, url, content_summary，唯一约束 symbol+title+publish_time） |
 | `analysis_result` | 分析结果（score, suggestion, master_detail, upside_conditions 等） |
 | `raw_market_data` | 原始市场数据管道（预留，当前一键采集跳过此表） |
+| `user_watchlist` | 用户关注列表（symbol, added_at） |
 
 ## 已知限制 / 待办
 
@@ -84,5 +95,6 @@
 | 分笔/Level2/盘口数据 | 未开始 |
 | `datetime.utcnow()` 废弃警告 → 改为 `datetime.now(UTC)` | 未处理 |
 | FastAPI `@app.on_event` 废弃 → 改为 lifespan | 未处理 |
-| K线图表未在前端展示 | 未开始 |
+| K线图表已在前端展示（lightweight-charts，支持20/60/120日切换） | 已完成 |
+| 个股新闻资讯已接入采集与展示 | 已完成 |
 | 生产 PostgreSQL 切换 | 简单（改 .env 的 DATABASE_URL）|

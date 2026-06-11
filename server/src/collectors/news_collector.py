@@ -1,12 +1,12 @@
 import datetime
 from typing import Optional, List
 from src.collectors.interface import CollectorInterface, CollectionResult, CollectItem
-from src.data_sources.east_money import fetch_kline
+from src.data_sources.east_money_news import fetch_news
 
 
-class KlineCollector(CollectorInterface):
+class NewsCollector(CollectorInterface):
     def data_type(self) -> str:
-        return "KLINE"
+        return "NEWS"
 
     def collect(
         self,
@@ -30,13 +30,13 @@ class KlineCollector(CollectorInterface):
 
         for symbol in symbols:
             try:
-                raw = self._fetch_kline(symbol, date_from, date_to)
-                item = CollectItem(
-                    symbol=symbol,
-                    data=raw,
-                    collected_at=datetime.datetime.now(),
-                )
-                result.success_items.append(item)
+                items = self._fetch_news(symbol)
+                for item in items:
+                    result.success_items.append(CollectItem(
+                        symbol=symbol,
+                        data=item,
+                        collected_at=datetime.datetime.now(),
+                    ))
             except Exception as e:
                 result.failed_items.append(CollectItem(
                     symbol=symbol,
@@ -49,5 +49,5 @@ class KlineCollector(CollectorInterface):
             result.is_partial = True
         return result
 
-    def _fetch_kline(self, symbol: str, date_from: Optional[str], date_to: Optional[str]) -> list[dict]:
-        return fetch_kline(symbol, datalen=500)
+    def _fetch_news(self, symbol: str) -> list[dict]:
+        return fetch_news(symbol, count=20)
