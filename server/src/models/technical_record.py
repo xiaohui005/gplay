@@ -12,7 +12,7 @@ class TechnicalRecord(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String(16), nullable=False, index=True, comment="股票代码")
     name = Column(String(64), nullable=False, comment="股票名称")
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True, comment="分析时间")
+    created_at = Column(DateTime, default=datetime.datetime.now, index=True, comment="保存时间")
 
     price_at_analysis = Column(Float, nullable=False, comment="分析时的最新收盘价")
     predicted_direction = Column(String(16), nullable=False, comment="预测方向: UP/DOWN/SIDEWAYS")
@@ -30,6 +30,8 @@ class TechnicalRecord(Base):
         risk_warning = indicators.pop("_riskWarning", [])
         recommendation = indicators.pop("_recommendation", "建议观望")
         signals = indicators.pop("_signals", {"buyPrice": 0, "sellPrice": 0, "stopLoss": 0})
+        analysis_session = indicators.pop("_analysisSession", None)
+        analysis_time_label = indicators.pop("_analysisTimeLabel", None)
         return {
             "id": self.id,
             "symbol": self.symbol,
@@ -47,4 +49,6 @@ class TechnicalRecord(Base):
             "isCorrect": self.is_correct,
             "actualDirection": self.actual_direction,
             "verifiedAt": self.verified_at.isoformat() if self.verified_at else None,
+            "analysisSession": analysis_session,
+            "analysisTimeLabel": analysis_time_label,
         }

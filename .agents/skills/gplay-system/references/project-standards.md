@@ -44,6 +44,12 @@
 | DELETE | `/api/watchlist/{symbol}` | 取消关注 |
 | GET | `/api/stocks/search-full` | 管理后台全量搜索 |
 | GET | `/api/stocks/{symbol}/t-analysis` | 做T分析（评分 + Metrics + 信号） |
+| GET | `/api/stocks/{symbol}/technical-analysis` | 技术研判（方向、信心度、信号价、证据/风险） |
+| POST | `/api/stocks/{symbol}/technical-analysis` | 保存技术研判到历史（含早盘/收盘前研判时段） |
+| GET | `/api/stocks/technical-analysis/history` | 技术研判历史（含准确率统计） |
+| GET | `/api/settings/notification` | 读取通知配置（Bark 配置） |
+| PUT | `/api/settings/notification` | 保存通知配置（Bark 启用、服务地址、Device Key） |
+| POST | `/api/settings/notification/test` | 发送 Bark 测试推送 |
 | GET | `/` | 服务信息（含可用端点列表） |
 
 ## 数据源
@@ -53,7 +59,7 @@
 | 实时行情 | Tencent Finance `qt.gtimg.cn` | `tencent_free` |
 | 股票列表 | Sina `vip.stock.finance.sina.com.cn` | `east_money_free` |
 | K线 | Sina `money.finance.sina.com.cn`（`scale=240` 日线） | `east_money_free` |
-| 新闻资讯 | East Money `push2.eastmoney.com/api/qt/stock/news/get` | `east_money_free` |
+| 新闻资讯 | East Money `search-api-web.eastmoney.com/search/jsonp` | `east_money_free` |
 
 ## 关键约定
 
@@ -66,6 +72,10 @@
 - BUY_LIGHT/BUY_WATCH 建议必须附带止损条件
 - data_sources 限流策略：腾讯接口不做控制，Sina 页间睡 0.5s，Sina K线无重试直接回调（East Money 区域不可达，已切换为 Sina）
 - East Money `push2his.eastmoney.com` / `push2.eastmoney.com` 在该环境不可达（`Remote end closed connection`），相关代码保留但标记废弃
+- 技术研判历史硬约束：每只股票每天最多 2 条，`09:30` 早盘研判 1 条、`14:30` 收盘前研判 1 条；同日同股票同时段再次保存只能更新原记录，不能新增重复记录
+- 技术研判自动保存只针对关注列表 `user_watchlist`，不扫全市场；页面预览不入历史，点击保存或定时任务才写入历史
+- 技术研判/做T指标计算必须先将 K 线按 `date` 升序排序，再使用 `closes[-1]` 作为最新价；做T价位必须贴近当前价，不能用旧 MA 产生远离现价的买卖点
+- Bark 推送第一版只做配置页和测试推送，不自动根据行情/新闻/技术研判触发；配置保存在 `notification_config` 表，后端接口统一在 `/api/settings/notification` 下。
 
 ## 前端关键文件
 
@@ -73,9 +83,12 @@
 |---|---|
 | `src/pages/SearchPage.tsx` | 搜索页：300ms 防抖、拼音支持、未入库一键采集、关注面板、关注按钮 |
 | `src/pages/DetailPage.tsx` | 详情页：行情头、K线图、评分网格、大师建议、买卖计划、相关资讯、采集/刷新按钮、关注按钮 |
+| `src/pages/TechnicalAnalysisPage.tsx` | 技术研判页：方向、信号强度、信号通知、买卖止损、指标网格、证据/风险 |
+| `src/pages/AnalysisHistoryPage.tsx` | 技术研判历史页：历史记录、准确率、验证结果 |
+| `src/pages/SettingsPage.tsx` | 系统配置页：Bark 启用、服务地址、Device Key、保存配置、测试推送 |
 | `src/components/KlineChart.tsx` | K 线图表组件（lightweight-charts，支持周期切换，含成交量柱） |
-| `src/api/client.ts` | API 请求封装（get/post/del helper + searchStocks, getQuote, getAnalysis, getKline, getNews, collectStock, getWatchlist, addWatchlist, removeWatchlist）|
-| `src/types/api.ts` | TypeScript 类型定义（StockItem, StockQuote, AnalysisResult, ScoreBlock, MasterGuidance, WatchlistItem, KlineBar, NewsItem, TMetrics, TLevels, TSignals, TAssessment, TAnalysisResult）|
+| `src/api/client.ts` | API 请求封装（get/post/put/del helper + 股票、关注、技术研判、通知配置 API）|
+| `src/types/api.ts` | TypeScript 类型定义（股票、行情、研判、关注、K线、新闻、技术研判、通知配置类型）|
 
 ## 数据模型
 
@@ -88,6 +101,7 @@
 | `analysis_result` | 分析结果（score, suggestion, master_detail, upside_conditions 等） |
 | `raw_market_data` | 原始市场数据管道（预留，当前一键采集跳过此表） |
 | `user_watchlist` | 用户关注列表（symbol, added_at） |
+| `notification_config` | 通知配置（Bark 启用、服务地址、Device Key） |
 
 ## 已知限制 / 待办
 
@@ -110,3 +124,5 @@
 | East Money API 不可达 | 采集/分析卡住 8s+ 后返回空 | 机器 IP 被 East Money 区域限制 | 切到 Sina K线 API |
 | 做T信号止损价高于买入价 | 盈亏比负数 | 下跌趋势中 MA20 > 当前价，止损取 MA20 导致在买入价之上 | 按趋势方向区分：上涨用 MA，下跌用 ATR，并强制 `stop < buy < sell` |
 | `Start-Process` 启动 `npx` 进程会立即退出 | 前端 dev server 启动后秒死 | `npx` 执行时需要下载/交互，Start-Process 的 Hidden 窗口不适合 | 直接用 `node_modules/.bin/vite` 路径绕过 npx |
+| 技术研判取到 K 线旧数据 | 买卖价远离现价 | `for k in klines: price = k["close"]` 遍历取到最后一条（最旧）数据，而 K 线按日期降序排列 | 用 `klines[0]["close"]` 取第一条（最新） |
+| 做T买卖价远离现价 | 当前价 27.57 却给 17.x 买入价 | K 线顺序和指标计算方向不一致，旧价/旧均线被当成当前参考 | 做T内部按日期升序排序，并限制买入价贴近当前价 |

@@ -194,7 +194,7 @@ export interface TechnicalIndicators {
 }
 
 export interface TechnicalAnalysisResult {
-  id: number
+  id: number | null
   symbol: string
   name: string
   createdAt: string
@@ -213,6 +213,8 @@ export interface TechnicalAnalysisResult {
   riskWarning: string[]
   isCorrect: boolean | null
   actualDirection: string | null
+  analysisSession?: string | null
+  analysisTimeLabel?: string | null
 }
 
 export interface AnalysisHistoryResponse {

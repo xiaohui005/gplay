@@ -71,7 +71,11 @@ export default function AnalysisHistoryPage() {
           <tbody>
             {results.map(r => (
               <tr key={r.id} onClick={() => nav(`/analysis/${r.symbol}`)} className="ta-history-row">
-                <td>{r.createdAt ? new Date(r.createdAt).toLocaleDateString('zh-CN') : ''}</td>
+                <td>
+                  {getAnalysisTimeLabel(r)}
+                  {r.createdAt ? <br /> : null}
+                  {r.createdAt ? <span className="dim">保存 {new Date(r.createdAt).toLocaleTimeString('zh-CN')}</span> : null}
+                </td>
                 <td>{r.symbol}<br /><span className="dim">{r.name}</span></td>
                 <td><span className={`ta-dir-${r.direction.toLowerCase()}`}>{dirMap[r.direction] || r.direction}</span></td>
                 <td>{r.confidence}%</td>
@@ -86,4 +90,13 @@ export default function AnalysisHistoryPage() {
       )}
     </div>
   )
+}
+
+function getAnalysisTimeLabel(result: TechnicalAnalysisResult) {
+  if (result.analysisTimeLabel) return result.analysisTimeLabel
+  if (!result.createdAt) return ''
+
+  const savedAt = new Date(result.createdAt)
+  const date = savedAt.toLocaleDateString('zh-CN')
+  return savedAt.getHours() < 12 ? `${date} 早盘研判 09:30` : `${date} 收盘前研判 14:30`
 }

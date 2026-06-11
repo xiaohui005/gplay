@@ -1,6 +1,8 @@
 .ta-page { max-width: 900px; margin: 0 auto; }
 .ta-header { margin-bottom: 16px; }
 .ta-header h2 { margin: 0; font-size: 1.3rem; }
+.ta-header > span { display: block; margin-top: 4px; }
+.ta-save-message { color: #1677ff; font-size: 0.85rem; }
 
 .ta-direction-card {
   padding: 20px; border-radius: 10px; margin-bottom: 20px;
@@ -24,6 +26,22 @@
 .ta-confidence-val { font-size: 1rem; font-weight: bold; min-width: 40px; }
 
 .ta-summary { font-size: 0.9rem; color: #333; line-height: 1.6; }
+
+.ta-notice-card { padding: 14px 16px; border-radius: 10px; border: 1px solid #e0e0e0; margin-bottom: 20px; background: #fff; }
+.ta-notice-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 700; margin-bottom: 6px; }
+.ta-notice-title b { font-size: 0.9rem; padding: 3px 10px; border-radius: 14px; white-space: nowrap; }
+.ta-notice-card p { margin: 0 0 6px; font-size: 0.9rem; line-height: 1.6; color: #333; }
+.ta-notice-card small { color: #666; line-height: 1.5; }
+.ta-notice-weak { background: #fffbe6; border-color: #ffe58f; }
+.ta-notice-weak .ta-notice-title b { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; }
+.ta-notice-medium { background: #e6f4ff; border-color: #91caff; }
+.ta-notice-medium .ta-notice-title b { background: #f0f5ff; color: #1677ff; border: 1px solid #adc6ff; }
+.ta-notice-neutral { background: #fafafa; border-color: #d9d9d9; }
+.ta-notice-neutral .ta-notice-title b { background: #f5f5f5; color: #595959; border: 1px solid #d9d9d9; }
+.ta-notice-strong-up { background: #f6ffed; border-color: #b7eb8f; }
+.ta-notice-strong-up .ta-notice-title b { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+.ta-notice-strong-down { background: #fff2f0; border-color: #ffccc7; }
+.ta-notice-strong-down .ta-notice-title b { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
 
 .ta-signal-box { display: flex; align-items: center; gap: 20px; margin: 12px 0; padding: 12px 16px; background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; }
 .ta-rec-badge { padding: 6px 18px; border-radius: 20px; font-size: 1rem; font-weight: bold; white-space: nowrap; }

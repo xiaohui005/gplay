@@ -148,6 +148,7 @@ def _calc_atr_from_data(highs: list[float], lows: list[float], closes: list[floa
 
 
 def analyze_technical(klines: list[dict]) -> dict:
+    klines = sorted(klines, key=lambda k: k.get("date", ""))
     closes = [b["close"] for b in klines if b.get("close") is not None]
     highs = [b["high"] for b in klines if b.get("high") is not None]
     lows = [b["low"] for b in klines if b.get("low") is not None]
@@ -274,12 +275,30 @@ def analyze_technical(klines: list[dict]) -> dict:
         summary_parts.append("多空力量均衡，建议观望")
     summary_parts.append(f"趋势{trend_detail}，{macd['detail']}，{rsi['detail']}，{bb['detail']}，{vol_analysis['detail']}")
 
-    # Compute buy/sell prices
+    # Compute buy/sell prices based on current price + ATR, not old support/resistance
     atr_val = _calc_atr_from_data(highs, lows, closes)
-    buy_price = round(max(sr["nearestSupport"], latest_close - atr_val), 2) if direction == "UP" else round(min(sr["nearestSupport"], latest_close - atr_val * 0.5), 2)
-    sell_price = round(min(sr["nearestResistance"], latest_close + atr_val), 2) if direction == "UP" else round(max(sr["nearestResistance"], latest_close + atr_val * 0.5), 2)
-    stop_loss = round(buy_price * 0.97, 2) if direction == "UP" else round(latest_close * 1.03, 2)
-    recommendation = "适合买入" if direction == "UP" else ("适合卖出" if direction == "DOWN" else "建议观望")
+    if direction == "UP":
+        buy_price = round(latest_close, 2)
+        sell_price = round(latest_close + atr_val, 2)
+        stop_loss = round(latest_close - atr_val * 0.5, 2)
+        recommendation = "适合买入"
+    elif direction == "DOWN":
+        buy_price = round(latest_close - atr_val * 0.5, 2)
+        sell_price = round(latest_close, 2)
+        stop_loss = round(latest_close + atr_val * 0.5, 2)
+        recommendation = "适合卖出"
+    else:
+        buy_price = round(latest_close - atr_val * 0.3, 2)
+        sell_price = round(latest_close + atr_val * 0.3, 2)
+        stop_loss = round(latest_close - atr_val * 0.8, 2)
+        recommendation = "建议观望"
+    # Ensure sane ordering: stop < buy < sell (for UP) or buy < sell < stop (for DOWN)
+    if direction == "UP":
+        stop_loss = min(stop_loss, buy_price * 0.97)
+        sell_price = max(sell_price, buy_price * 1.005)
+    elif direction == "DOWN":
+        stop_loss = max(stop_loss, sell_price * 1.03)
+        buy_price = min(buy_price, sell_price * 0.995)
 
     return {
         "direction": direction,

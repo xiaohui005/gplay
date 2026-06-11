@@ -74,6 +74,10 @@ export function getTechnicalAnalysis(symbol: string): Promise<TechnicalAnalysisR
   return get(`/stocks/${symbol}/technical-analysis`)
 }
 
+export function saveTechnicalAnalysis(symbol: string): Promise<TechnicalAnalysisResult> {
+  return post('/stocks/' + symbol + '/technical-analysis')
+}
+
 export function getAnalysisHistory(symbol?: string, page = 1, limit = 20): Promise<AnalysisHistoryResponse> {
   const params = new URLSearchParams()
   if (symbol) params.set('symbol', symbol)

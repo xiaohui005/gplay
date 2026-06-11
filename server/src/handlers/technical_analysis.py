@@ -20,46 +20,139 @@ def get_technical_analysis(symbol: str, db: Session = Depends(get_db)):
     if not basic:
         raise HTTPException(status_code=404, detail=f"股票 {symbol} 未找到")
 
-    recent = db.query(TechnicalRecord).filter(
-        TechnicalRecord.symbol == symbol,
-        TechnicalRecord.created_at >= datetime.datetime.utcnow() - datetime.timedelta(seconds=10),
-    ).order_by(TechnicalRecord.created_at.desc()).first()
-    if recent:
-        return recent.to_dict()
+    return _build_technical_analysis(symbol, basic)
 
-    klines = fetch_kline(symbol, datalen=120)
-    if not klines:
-        raise HTTPException(status_code=400, detail=f"股票 {symbol} K线数据获取失败")
 
-    latest_close = None
-    for k in klines:
-        if k.get("close") is not None:
-            latest_close = k["close"]
-    if latest_close is None:
-        raise HTTPException(status_code=400, detail=f"股票 {symbol} 无有效收盘价")
+@router.post("/{symbol}/technical-analysis")
+def save_technical_analysis(symbol: str, db: Session = Depends(get_db)):
+    return save_technical_analysis_for_symbol(db, symbol)
 
-    result = analyze_technical(klines)
 
-    indicators = dict(result["indicators"])
-    indicators["_keyEvidence"] = result["keyEvidence"]
-    indicators["_riskWarning"] = result["riskWarning"]
-    indicators["_recommendation"] = result["recommendation"]
-    indicators["_signals"] = result["signals"]
+def save_technical_analysis_for_symbol(db: Session, symbol: str, allow_duplicate: bool = False):
+    basic = db.query(StockBasic).filter(StockBasic.symbol == symbol).first()
+    if not basic:
+        raise HTTPException(status_code=404, detail=f"股票 {symbol} 未找到")
+
+    payload = _build_technical_analysis(symbol, basic)
+    indicators = _build_record_indicators(payload)
+
+    existing_record = None if allow_duplicate else _find_today_session_record(db, symbol, payload["analysisSession"])
+    if existing_record:
+        existing_record.name = basic.name
+        existing_record.price_at_analysis = payload["priceAtAnalysis"]
+        existing_record.predicted_direction = payload["direction"]
+        existing_record.confidence_score = payload["confidence"]
+        existing_record.indicators_json = json.dumps(indicators, ensure_ascii=False)
+        existing_record.summary = payload["summary"]
+        existing_record.created_at = datetime.datetime.now()
+        db.commit()
+        db.refresh(existing_record)
+        return existing_record.to_dict()
 
     record = TechnicalRecord(
         symbol=symbol,
         name=basic.name,
-        price_at_analysis=latest_close,
-        predicted_direction=result["direction"],
-        confidence_score=result["confidence"],
+        price_at_analysis=payload["priceAtAnalysis"],
+        predicted_direction=payload["direction"],
+        confidence_score=payload["confidence"],
         indicators_json=json.dumps(indicators, ensure_ascii=False),
-        summary=result["summary"],
+        summary=payload["summary"],
     )
     db.add(record)
     db.commit()
     db.refresh(record)
 
     return record.to_dict()
+
+
+def _build_record_indicators(payload: dict) -> dict:
+    indicators = dict(payload["indicators"])
+    indicators["_keyEvidence"] = payload["keyEvidence"]
+    indicators["_riskWarning"] = payload["riskWarning"]
+    indicators["_recommendation"] = payload["recommendation"]
+    indicators["_signals"] = payload["signals"]
+    indicators["_analysisSession"] = payload["analysisSession"]
+    indicators["_analysisTimeLabel"] = payload["analysisTimeLabel"]
+    return indicators
+
+
+def _find_today_session_record(db: Session, symbol: str, analysis_session: str):
+    today_start = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    records = db.query(TechnicalRecord).filter(
+        TechnicalRecord.symbol == symbol,
+        TechnicalRecord.created_at >= today_start,
+    ).order_by(TechnicalRecord.created_at.desc()).all()
+    for record in records:
+        data = record.to_dict()
+        existing_session = data.get("analysisSession") or _infer_analysis_session(record.created_at)
+        if existing_session == analysis_session:
+            return record
+    return None
+
+
+def _build_technical_analysis(symbol: str, basic: StockBasic):
+
+    klines = sorted(fetch_kline(symbol, datalen=120), key=lambda k: k.get("date", ""))
+    if not klines:
+        raise HTTPException(status_code=400, detail=f"股票 {symbol} K线数据获取失败")
+
+    current_price = klines[-1].get("close") if klines[-1].get("close") is not None else None
+    if current_price is None:
+        raise HTTPException(status_code=400, detail=f"股票 {symbol} 无有效收盘价")
+
+    result = analyze_technical(klines)
+
+    # Compute buy/sell/stop based on current price + ATR
+    atr = result.get("indicators", {}).get("volatility", {}).get("width", 0)
+    atr_price = current_price * atr / 100 if atr else current_price * 0.02
+    direction = result["direction"]
+    if direction == "UP":
+        signals = {"buyPrice": round(current_price, 2), "sellPrice": round(current_price + atr_price, 2), "stopLoss": round(current_price - atr_price * 0.5, 2)}
+    elif direction == "DOWN":
+        signals = {"buyPrice": round(current_price - atr_price * 0.5, 2), "sellPrice": round(current_price, 2), "stopLoss": round(current_price + atr_price * 0.5, 2)}
+    else:
+        signals = {"buyPrice": round(current_price - atr_price * 0.3, 2), "sellPrice": round(current_price + atr_price * 0.3, 2), "stopLoss": round(current_price - atr_price * 0.8, 2)}
+    if direction == "UP":
+        signals["stopLoss"] = min(signals["stopLoss"], round(signals["buyPrice"] * 0.97, 2))
+        signals["sellPrice"] = max(signals["sellPrice"], round(signals["buyPrice"] * 1.005, 2))
+    elif direction == "DOWN":
+        signals["stopLoss"] = max(signals["stopLoss"], round(signals["sellPrice"] * 1.03, 2))
+        signals["buyPrice"] = min(signals["buyPrice"], round(signals["sellPrice"] * 0.995, 2))
+
+    analysis_session, analysis_time_label = _get_analysis_session(datetime.datetime.now())
+
+    return {
+        "id": None,
+        "symbol": symbol,
+        "name": basic.name,
+        "createdAt": None,
+        "priceAtAnalysis": current_price,
+        "direction": result["direction"],
+        "confidence": result["confidence"],
+        "recommendation": result["recommendation"],
+        "signals": signals,
+        "indicators": result["indicators"],
+        "keyEvidence": result["keyEvidence"],
+        "riskWarning": result["riskWarning"],
+        "summary": result["summary"],
+        "isCorrect": None,
+        "actualDirection": None,
+        "verifiedAt": None,
+        "analysisSession": analysis_session,
+        "analysisTimeLabel": analysis_time_label,
+    }
+
+
+def _get_analysis_session(now: datetime.datetime):
+    if now.time() < datetime.time(12, 0):
+        return "MORNING", f"{now:%Y/%m/%d} 早盘研判 09:30"
+    return "AFTERNOON", f"{now:%Y/%m/%d} 收盘前研判 14:30"
+
+
+def _infer_analysis_session(created_at: datetime.datetime | None):
+    if not created_at:
+        return None
+    return "MORNING" if created_at.time() < datetime.time(12, 0) else "AFTERNOON"
 
 
 @router.get("/technical-analysis/history")
@@ -77,13 +170,13 @@ def list_history(
     query = query.offset((page - 1) * limit).limit(limit)
     records = query.all()
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now()
     for rec in records:
         if rec.is_correct is not None:
             continue
         if rec.created_at and (now - rec.created_at).total_seconds() < 3600:
             continue
-        klines = fetch_kline(rec.symbol, datalen=5)
+        klines = sorted(fetch_kline(rec.symbol, datalen=5), key=lambda k: k.get("date", ""), reverse=True)
         for k in klines:
             if k.get("close") is not None:
                 latest = k["close"]

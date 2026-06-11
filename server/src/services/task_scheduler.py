@@ -2,6 +2,9 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from src.db.database import SessionLocal
+from src.handlers.technical_analysis import save_technical_analysis_for_symbol
+from src.models import UserWatchlist
 from src.services.collection_service import CollectionService
 
 logger = logging.getLogger(__name__)
@@ -114,6 +117,21 @@ class TaskScheduler:
             replace_existing=True,
         )
 
+        self.scheduler.add_job(
+            self._save_watchlist_technical_analysis,
+            CronTrigger(hour=9, minute=30),
+            id="save_watchlist_technical_morning",
+            name="关注股早盘技术研判保存",
+            replace_existing=True,
+        )
+        self.scheduler.add_job(
+            self._save_watchlist_technical_analysis,
+            CronTrigger(hour=14, minute=30),
+            id="save_watchlist_technical_afternoon",
+            name="关注股收盘前技术研判保存",
+            replace_existing=True,
+        )
+
     def _collect_stock_basic(self):
         logger.info("调度: 股票基础信息同步")
         self.service.create_and_run("STOCK_BASIC", trigger_type="SCHEDULED")
@@ -149,3 +167,17 @@ class TaskScheduler:
     def _retry_failed_jobs(self):
         logger.info("调度: 检查失败任务重试")
         self.service.retry_failed_jobs()
+
+    def _save_watchlist_technical_analysis(self):
+        db = SessionLocal()
+        try:
+            rows = db.query(UserWatchlist).order_by(UserWatchlist.added_at.desc()).all()
+            logger.info("调度: 自动保存关注股技术研判，共 %d 只", len(rows))
+            for row in rows:
+                try:
+                    result = save_technical_analysis_for_symbol(db, row.symbol, allow_duplicate=False)
+                    logger.info("自动保存技术研判 [%s] %s", row.symbol, result.get("analysisTimeLabel"))
+                except Exception as exc:
+                    logger.warning("自动保存技术研判 [%s] 失败: %s", row.symbol, exc)
+        finally:
+            db.close()

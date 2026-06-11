@@ -108,8 +108,13 @@ def t_analysis(symbol: str, db: Session = Depends(get_db)):
     quote = db.query(StockQuoteSnapshot).filter(
         StockQuoteSnapshot.symbol == symbol
     ).order_by(StockQuoteSnapshot.id.desc()).first()
+    live_quote = None
+    try:
+        live_quote = fetch_quote(symbol)
+    except Exception as exc:
+        logger.warning("实时行情 [%s] 获取失败，使用数据库快照: %s", symbol, exc)
 
-    klines = fetch_kline(symbol)
+    klines = sorted(fetch_kline(symbol), key=lambda k: k.get("date", ""))
     if not klines:
         return {
             "symbol": symbol,
@@ -133,7 +138,7 @@ def t_analysis(symbol: str, db: Session = Depends(get_db)):
                 "ma10": None,
                 "ma20": None,
                 "ma60": None,
-                "currentPrice": quote.latest_price if quote else 0,
+                "currentPrice": (live_quote.get("latest_price") if live_quote else None) or (quote.latest_price if quote else 0),
             },
             "signals": {
                 "buyPrice": 0,
@@ -159,7 +164,13 @@ def t_analysis(symbol: str, db: Session = Depends(get_db)):
     highs = [b["high"] for b in klines if b["high"] is not None]
     lows = [b["low"] for b in klines if b["low"] is not None]
     volumes = [b["volume"] for b in klines if b["volume"] is not None]
-    latest_close = closes[-1] if closes else 0
+    latest_close = (live_quote.get("latest_price") if live_quote else None) or (quote.latest_price if quote and quote.latest_price else None) or (closes[-1] if closes else 0)
+    if closes and latest_close:
+        closes[-1] = latest_close
+        if highs:
+            highs[-1] = max(highs[-1], latest_close)
+        if lows:
+            lows[-1] = min(lows[-1], latest_close)
 
     amps_5 = [(h - l) / c * 100 for h, l, c in zip(highs[-5:], lows[-5:], closes[-5:])]
     amps_10 = [(h - l) / c * 100 for h, l, c in zip(highs[-10:], lows[-10:], closes[-10:])]
@@ -245,7 +256,10 @@ def t_analysis(symbol: str, db: Session = Depends(get_db)):
         sell_price = round(min(ma5 or latest_close + atr, latest_close + atr * 0.5), 2)
         stop_loss = round(min(buy_price * 0.98, latest_close - atr), 2)
     # 确保止损价始终低于买入价，卖出价高于买入价
-    stop_loss = round(min(stop_loss, buy_price * 0.99), 2)
+    buy_price = max(buy_price, round(latest_close * 0.95, 2))
+    buy_price = min(buy_price, round(latest_close * 0.995, 2))
+    stop_loss = round(max(min(stop_loss, buy_price * 0.99), buy_price * 0.98), 2)
+    sell_price = max(sell_price, round(latest_close + atr * 0.5, 2))
     sell_price = max(sell_price, round(buy_price * 1.005, 2))  # 至少0.5%差价
 
     expected_profit = round(sell_price - buy_price, 2)
