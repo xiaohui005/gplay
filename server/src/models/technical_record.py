@@ -35,12 +35,6 @@ class TechnicalRecord(Base):
         direction = self.predicted_direction
         recommendation = recommendation
         summary = self.summary
-        if direction in ("UP", "DOWN") and self.confidence_score < 55:
-            direction = "SIDEWAYS"
-            recommendation = "建议观望"
-            if not summary.startswith("信号强度不足"):
-                summary = f"信号强度不足，暂不做方向判断；{summary}"
-
         return {
             "id": self.id,
             "symbol": self.symbol,

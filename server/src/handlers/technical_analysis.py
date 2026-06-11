@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.analysis.technical_engine import analyze_technical
 from src.data_sources.east_money import fetch_kline
 from src.db.database import get_db
-from src.models import StockBasic, TechnicalRecord
+from src.models import StockBasic, TechnicalRecord, StockQuoteSnapshot
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/stocks", tags=["technical-analysis"])
@@ -145,7 +145,7 @@ def _build_technical_analysis(symbol: str, basic: StockBasic):
 
 def _get_analysis_session(now: datetime.datetime):
     if now.time() < datetime.time(12, 0):
-        return "MORNING", f"{now:%Y/%m/%d} 早盘研判 09:30"
+        return "MORNING", f"{now:%Y/%m/%d} 早盘研判 10:00"
     return "AFTERNOON", f"{now:%Y/%m/%d} 收盘前研判 14:30"
 
 
@@ -156,21 +156,53 @@ def _infer_analysis_session(created_at: datetime.datetime | None):
 
 
 def evaluate_prediction(predicted_direction: str, change_pct: float) -> dict:
-    if change_pct > 0.5:
-        actual = "UP"
-    elif change_pct < -0.5:
-        actual = "DOWN"
-    else:
-        actual = "SIDEWAYS"
-    if actual == "SIDEWAYS" and predicted_direction in ("UP", "DOWN"):
-        return {"actualDirection": actual, "isCorrect": None}
+    actual = "UP" if change_pct >= 0 else "DOWN"
     return {"actualDirection": actual, "isCorrect": actual == predicted_direction}
 
 
 def normalize_prediction_result(predicted_direction: str, actual_direction: str | None, is_correct: bool | None) -> dict:
-    if actual_direction == "SIDEWAYS" and predicted_direction in ("UP", "DOWN") and is_correct is False:
-        return {"actualDirection": actual_direction, "isCorrect": None}
+    if actual_direction == "SIDEWAYS":
+        if is_correct is True:
+            actual_direction = predicted_direction
+        elif predicted_direction == "UP":
+            actual_direction = "DOWN"
+        else:
+            actual_direction = "UP"
+        is_correct = actual_direction == predicted_direction
     return {"actualDirection": actual_direction, "isCorrect": is_correct}
+
+
+def select_validation_price(created_at: datetime.datetime, analysis_session: str | None, klines: list[dict]) -> float | None:
+    rows = sorted(klines, key=lambda k: k.get("date", ""))
+    created_date = created_at.date().isoformat()
+    session = analysis_session or _infer_analysis_session(created_at)
+    if session == "MORNING":
+        for row in rows:
+            if row.get("date") == created_date:
+                return row.get("close")
+        return None
+    return None
+
+
+def select_intraday_validation_price(created_at: datetime.datetime, analysis_session: str | None, snapshots: list[StockQuoteSnapshot]) -> float | None:
+    session = analysis_session or _infer_analysis_session(created_at)
+    if session != "AFTERNOON":
+        return None
+    target_date = created_at.date() + datetime.timedelta(days=1)
+    target_start = datetime.datetime.combine(target_date, datetime.time(10, 0))
+    tolerance_start = target_start - datetime.timedelta(minutes=5)
+    rows = sorted(
+        (s for s in snapshots if s.data_time and s.data_time >= target_start and s.latest_price is not None),
+        key=lambda s: s.data_time,
+    )
+    if rows:
+        return rows[0].latest_price
+    fallback_rows = sorted(
+        (s for s in snapshots if s.data_time and tolerance_start <= s.data_time < target_start and s.latest_price is not None),
+        key=lambda s: s.data_time,
+        reverse=True,
+    )
+    return fallback_rows[0].latest_price if fallback_rows else None
 
 
 @router.get("/technical-analysis/history")
@@ -198,14 +230,18 @@ def list_history(
             continue
         if rec.created_at and (now - rec.created_at).total_seconds() < 3600:
             continue
-        klines = sorted(fetch_kline(rec.symbol, datalen=5), key=lambda k: k.get("date", ""), reverse=True)
-        for k in klines:
-            if k.get("close") is not None:
-                latest = k["close"]
-                break
-        else:
+        analysis_session = rec.to_dict().get("analysisSession")
+        validation_price = select_intraday_validation_price(
+            rec.created_at,
+            analysis_session,
+            db.query(StockQuoteSnapshot).filter(StockQuoteSnapshot.symbol == rec.symbol).all(),
+        )
+        if validation_price is None:
+            klines = fetch_kline(rec.symbol, datalen=5)
+            validation_price = select_validation_price(rec.created_at, analysis_session, klines)
+        if validation_price is None:
             continue
-        change_pct = (latest - rec.price_at_analysis) / rec.price_at_analysis * 100
+        change_pct = (validation_price - rec.price_at_analysis) / rec.price_at_analysis * 100
         result = evaluate_prediction(rec.predicted_direction, change_pct)
         rec.actual_direction = result["actualDirection"]
         rec.is_correct = result["isCorrect"]
@@ -216,7 +252,6 @@ def list_history(
 
     verified = [r for r in records if r.is_correct is not None]
     correct_count = sum(1 for r in verified if r.is_correct)
-    neutral_count = sum(1 for r in records if r.actual_direction == "SIDEWAYS" and r.is_correct is None)
 
     return {
         "items": items,
@@ -227,7 +262,6 @@ def list_history(
             "totalRecords": total,
             "verifiedCount": len(verified),
             "correctCount": correct_count,
-            "neutralCount": neutral_count,
             "accuracy": round(correct_count / len(verified) * 100, 1) if verified else None,
         },
     }

@@ -4,6 +4,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from src.db.database import SessionLocal
 from src.handlers.technical_analysis import save_technical_analysis_for_symbol
+from src.handlers.stock import collect_stock
 from src.models import UserWatchlist
 from src.services.collection_service import CollectionService
 
@@ -119,7 +120,7 @@ class TaskScheduler:
 
         self.scheduler.add_job(
             self._save_watchlist_technical_analysis,
-            CronTrigger(hour=9, minute=30),
+            CronTrigger(hour=10, minute=0),
             id="save_watchlist_technical_morning",
             name="关注股早盘技术研判保存",
             replace_existing=True,
@@ -175,6 +176,8 @@ class TaskScheduler:
             logger.info("调度: 自动保存关注股技术研判，共 %d 只", len(rows))
             for row in rows:
                 try:
+                    collect_stock(row.symbol, db)
+                    logger.info("自动刷新关注股数据 [%s] 完成", row.symbol)
                     result = save_technical_analysis_for_symbol(db, row.symbol, allow_duplicate=False)
                     logger.info("自动保存技术研判 [%s] %s", row.symbol, result.get("analysisTimeLabel"))
                 except Exception as exc:

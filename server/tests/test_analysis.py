@@ -39,14 +39,14 @@ from src.analysis.risk_control import (
     SUGGESTION_HOLD,
 )
 from src.analysis.suggestion import map_suggestion
-from src.analysis.technical_engine import apply_confidence_floor
+from src.analysis.technical_engine import apply_confidence_floor, decide_direction
 from src.db.database import SessionLocal, engine, Base
-from src.handlers.technical_analysis import evaluate_prediction, normalize_prediction_result
+from src.handlers.technical_analysis import evaluate_prediction, normalize_prediction_result, select_validation_price, select_intraday_validation_price
 
 client = TestClient(app)
 
 
-def test_low_confidence_direction_becomes_sideways():
+def test_low_confidence_direction_stays_directional():
     result = apply_confidence_floor(
         direction="UP",
         confidence=45,
@@ -54,30 +54,105 @@ def test_low_confidence_direction_becomes_sideways():
         summary="综合研判：看涨↑，信心度45%",
     )
 
-    assert result["direction"] == "SIDEWAYS"
-    assert result["recommendation"] == "建议观望"
-    assert "信号强度不足" in result["summary"]
+    assert result["direction"] == "UP"
+    assert result["recommendation"] == "适合买入"
+    assert "信号强度不足" not in result["summary"]
 
 
-def test_sideways_result_does_not_count_as_wrong_for_directional_prediction():
+def test_neutral_weight_still_returns_direct_up_or_down_direction():
+    assert decide_direction(0, 10)["direction"] == "UP"
+    assert decide_direction(-0.1, 10)["direction"] == "DOWN"
+
+
+def test_small_positive_move_counts_as_up_result():
     result = evaluate_prediction(predicted_direction="UP", change_pct=0.1)
 
-    assert result["actualDirection"] == "SIDEWAYS"
-    assert result["isCorrect"] is None
+    assert result["actualDirection"] == "UP"
+    assert result["isCorrect"] is True
 
 
-def test_legacy_sideways_wrong_result_is_reclassified_as_unverified():
+def test_small_negative_move_counts_as_down_result():
+    result = evaluate_prediction(predicted_direction="UP", change_pct=-0.1)
+
+    assert result["actualDirection"] == "DOWN"
+    assert result["isCorrect"] is False
+
+
+def test_legacy_sideways_wrong_result_maps_to_opposite_direction():
     result = normalize_prediction_result(
         predicted_direction="DOWN",
         actual_direction="SIDEWAYS",
         is_correct=False,
     )
 
-    assert result["actualDirection"] == "SIDEWAYS"
-    assert result["isCorrect"] is None
+    assert result["actualDirection"] == "UP"
+    assert result["isCorrect"] is False
 
 
-def test_low_confidence_saved_record_displays_as_sideways():
+def test_morning_analysis_validates_same_day_close():
+    price = select_validation_price(
+        created_at=datetime.datetime(2026, 6, 11, 9, 30),
+        analysis_session="MORNING",
+        klines=[
+            {"date": "2026-06-10", "open": 9.8, "close": 10.0},
+            {"date": "2026-06-11", "open": 10.0, "close": 10.2},
+        ],
+    )
+
+    assert price == 10.2
+
+
+def test_afternoon_analysis_waits_for_next_day_10am_snapshot():
+    price = select_validation_price(
+        created_at=datetime.datetime(2026, 6, 11, 14, 30),
+        analysis_session="AFTERNOON",
+        klines=[
+            {"date": "2026-06-11", "open": 10.0, "close": 10.2},
+            {"date": "2026-06-12", "open": 10.3, "close": 10.6},
+        ],
+    )
+
+    assert price is None
+
+
+def test_select_intraday_validation_price_uses_first_snapshot_after_10am():
+    snapshot_before_10 = StockQuoteSnapshot(
+        symbol="000001",
+        latest_price=10.1,
+        data_time=datetime.datetime(2026, 6, 12, 9, 45),
+    )
+    snapshot_after_10 = StockQuoteSnapshot(
+        symbol="000001",
+        latest_price=10.3,
+        data_time=datetime.datetime(2026, 6, 12, 10, 1),
+    )
+
+    price = select_intraday_validation_price(
+        created_at=datetime.datetime(2026, 6, 11, 14, 30),
+        analysis_session="AFTERNOON",
+        snapshots=[snapshot_before_10, snapshot_after_10],
+    )
+
+    assert price == 10.3
+
+
+def test_select_intraday_validation_price_allows_five_minute_tolerance():
+    snapshot_in_tolerance = StockQuoteSnapshot(
+        symbol="000001",
+        latest_price=10.25,
+        data_time=datetime.datetime(2026, 6, 12, 9, 56),
+    )
+
+    price = select_intraday_validation_price(
+        created_at=datetime.datetime(2026, 6, 11, 14, 30),
+        analysis_session="AFTERNOON",
+        snapshots=[snapshot_in_tolerance],
+    )
+
+    assert price == 10.25
+
+
+def test_low_confidence_saved_record_keeps_direction():
     record = TechnicalRecord(
         symbol="000001",
         name="平安银行",
@@ -90,9 +165,9 @@ def test_low_confidence_saved_record_displays_as_sideways():
 
     result = record.to_dict()
 
-    assert result["direction"] == "SIDEWAYS"
-    assert result["recommendation"] == "建议观望"
-    assert "信号强度不足" in result["summary"]
+    assert result["direction"] == "DOWN"
+    assert result["recommendation"] == "适合卖出"
+    assert "信号强度不足" not in result["summary"]
 
 
 @pytest.fixture(autouse=True)

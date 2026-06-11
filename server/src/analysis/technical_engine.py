@@ -219,17 +219,9 @@ def analyze_technical(klines: list[dict]) -> dict:
     total_weighted = w_trend + w_macd + w_rsi + w_bb + w_vol + w_sr
     max_possible = 3 + 1.5 + 0.5 + 1 + 1.5 + 1.5  # = 10
 
-    if total_weighted > 1:
-        direction = "UP"
-        confidence = min(abs(total_weighted) / max_possible * 100, 100)
-    elif total_weighted < -1:
-        direction = "DOWN"
-        confidence = min(abs(total_weighted) / max_possible * 100, 100)
-    else:
-        direction = "SIDEWAYS"
-        confidence = 50
-
-    confidence = round(confidence, 0)
+    decision = decide_direction(total_weighted, max_possible)
+    direction = decision["direction"]
+    confidence = decision["confidence"]
 
     # Build evidence and risks
     key_evidence = []
@@ -272,7 +264,7 @@ def analyze_technical(klines: list[dict]) -> dict:
     elif direction == "DOWN":
         summary_parts.append("多项指标共振偏空" if total_weighted < -4 else "部分指标偏空，但信号强度一般")
     else:
-        summary_parts.append("多空力量均衡，建议观望")
+        summary_parts.append("多空力量接近，按当前权重给出方向判断")
     summary_parts.append(f"趋势{trend_detail}，{macd['detail']}，{rsi['detail']}，{bb['detail']}，{vol_analysis['detail']}")
 
     # Compute buy/sell prices based on current price + ATR, not old support/resistance
@@ -291,7 +283,7 @@ def analyze_technical(klines: list[dict]) -> dict:
         buy_price = round(latest_close - atr_val * 0.3, 2)
         sell_price = round(latest_close + atr_val * 0.3, 2)
         stop_loss = round(latest_close - atr_val * 0.8, 2)
-        recommendation = "建议观望"
+        recommendation = "适合买入" if direction == "UP" else "适合卖出"
     # Ensure sane ordering: stop < buy < sell (for UP) or buy < sell < stop (for DOWN)
     if direction == "UP":
         stop_loss = min(stop_loss, buy_price * 0.97)
@@ -343,11 +335,13 @@ def apply_confidence_floor(direction: str, confidence: float, recommendation: st
     }
     if payload:
         result.update(payload)
-    if direction in ("UP", "DOWN") and confidence < 55:
-        result["direction"] = "SIDEWAYS"
-        result["recommendation"] = "建议观望"
-        result["summary"] = f"信号强度不足，暂不做方向判断；{summary}"
     return result
+
+
+def decide_direction(total_weighted: float, max_possible: float) -> dict:
+    direction = "UP" if total_weighted >= 0 else "DOWN"
+    confidence = min(abs(total_weighted) / max_possible * 100, 100) if max_possible else 0
+    return {"direction": direction, "confidence": round(max(confidence, 50), 0)}
 
 
 def _empty_result(reason: str) -> dict:
