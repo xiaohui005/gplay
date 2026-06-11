@@ -1,49 +1,88 @@
 # GPlay 项目标准记录
 
-这份文件用于随着开发慢慢沉淀项目事实。不要把猜测写成标准；没有验证过的内容标记为 `待确认`。
-
 ## 当前状态
 
 - 项目目录：`D:\gongju\gplay`
-- 当前已发现：目录目前缺少可识别的项目入口文件，尚未发现 `package.json`、锁文件、README、前端配置或后端配置。
-- 技术栈：待确认
-- 前端目录：待确认
-- 后端目录：待确认
-- 启动命令：待确认
-- 前端打包命令：待确认
-- 后端重启命令：待确认
-- 测试命令：待确认
+- 技术栈：Python 3.13.5 + FastAPI + SQLAlchemy + APScheduler (后端)，Vite + React + TypeScript + react-router-dom (前端)
+- 数据库：SQLite（开发），通过 `DATABASE_URL` 环境变量可切换 PostgreSQL
+- 后端目录：`D:\gongju\gplay\server`，入口 `src/main.py`
+- 前端目录：`D:\gongju\gplay\frontend`，入口 `src/main.tsx`
 
-## 开发默认约定
+## 端口
 
-在项目结构明确前，执行任务时必须先发现：
-
-1. 项目技术栈。
-2. 前端和后端边界。
-3. 依赖安装方式。
-4. 启动、测试、打包命令。
-5. 配置文件和环境变量位置。
-6. 是否有已有编码、命名、路由、接口、权限和日志规范。
-
-## 验收默认约定
-
-项目命令明确前，验收顺序先按下面执行：
-
-1. 针对改动文件做静态检查和编码检查。
-2. 能发现测试命令时，运行相关测试。
-3. 能发现前端打包命令时，运行前端打包。
-4. 能发现后端重启命令时，后端相关改动后重启后端。
-5. 如果命令缺失，交付时明确写出“未发现对应命令”，并把缺口记录在本文件。
-
-## 待确认问题
-
-| 问题 | 影响 | 当前处理 |
+| 服务 | 端口 | 备注 |
 |---|---|---|
-| 项目技术栈是什么 | 决定开发、测试、构建方式 | 每次任务开始先检查仓库文件 |
-| 前端打包命令是什么 | 决定交付验收 | 发现后记录到本文件 |
-| 后端重启命令是什么 | 决定后端交付动作 | 发现后记录到本文件 |
-| 是否需要固定端口或启动顺序 | 决定本地联调 | 发现后记录到本文件 |
+| 后端 (FastAPI) | 8008 | |
+| 前端 (Vite dev) | 5173 | proxy /api → localhost:8008 |
 
-## 已沉淀标准
+## 命令
 
-暂无。后续在真实开发中逐步补充。
+| 动作 | 工作目录 | 命令 |
+|---|---|---|
+| 启动后端 | `server/` | `python -m src.main` |
+| 启动前端 dev | `frontend/` | `npx vite --host` |
+| 前端 TypeScript 检查 | `frontend/` | `npx tsc --noEmit` |
+| 前端生产打包 | `frontend/` | `npx tsc --noEmit; npx vite build` |
+| 运行后端测试 | `server/` | `python -m pytest` |
+| 运行单测文件 | `server/` | `python -m pytest tests/test_xxx.py -v` |
+| 种子数据 | `server/` | `python -m src.seed` |
+| 后端重启 | `server/` | 先 kill 旧进程，再 `python -m src.main` |
+
+## 后端关键端点
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/api/stocks/search?keyword=...&limit=...` | 搜索股票（代码前缀/名称模糊/拼音模糊） |
+| GET | `/api/stocks/{symbol}/analysis` | 获取完整研判结果（评分、大师建议、条件、买卖计划、复盘） |
+| POST | `/api/stocks/{symbol}/collect` | 一键采集（腾讯行情 + 东方财富K线），直接写入标准表 |
+| GET | `/api/stocks/search-full` | 管理后台全量搜索 |
+| GET | `/` | 服务信息（含可用端点列表） |
+
+## 数据源
+
+| 数据 | 来源 | source_code |
+|---|---|---|
+| 实时行情 | Tencent Finance `qt.gtimg.cn` | `tencent_free` |
+| 股票列表 | Sina `vip.stock.finance.sina.com.cn` | `east_money_free` |
+| K线 | East Money `push2his.eastmoney.com` | `east_money_free` |
+
+## 关键约定
+
+- `symbol` 以裸代码格式存储（如 `"000630"`），不带市场前缀，`market` 字段单独存储（`SSE`/`SZSE`/`BSE`）
+- 前端 proxy `/api` → `http://localhost:8008` 在 `vite.config.ts` 中配置
+- 一键采集端点 `POST /collect` 绕过 `raw_market_data` 管道，直接写入 `stock_basic` + `stock_quote_snapshot` 标准表
+- 前端处理行情 404：显示"尚未采集" + 采集按钮
+- 前端搜索页处理未入库股票：显示"数据库中暂无该股票" + 采集按钮
+- SUSPENDED/DELISTED 股票跳过评分，直接返回 HOLD/AVOID
+- BUY_LIGHT/BUY_WATCH 建议必须附带止损条件
+- data_sources 限流策略：腾讯接口不做控制，Sina 页间睡 0.5s，东方财富 K线 502 时重试
+
+## 前端关键文件
+
+| 文件 | 用途 |
+|---|---|
+| `src/pages/SearchPage.tsx` | 搜索页：300ms 防抖、拼音支持、未入库一键采集 |
+| `src/pages/DetailPage.tsx` | 详情页：行情头、评分网格、大师建议、买卖计划、采集/刷新按钮 |
+| `src/api/client.ts` | API 请求封装（searchStocks, getQuote, getAnalysis, collectStock）|
+| `src/types/api.ts` | TypeScript 类型定义（StockItem, AnalysisResult, ScoreBlock, MasterGuidance）|
+
+## 数据模型
+
+| 表 | 用途 |
+|---|---|
+| `stock_basic` | 股票基本信息（symbol, name, market, trade_status, pinyin, list_date, total_shares） |
+| `stock_quote_snapshot` | 行情快照（latest_price, change_percent, volume, amount, turnover_rate, volume_ratio 等） |
+| `analysis_result` | 分析结果（score, suggestion, master_detail, upside_conditions 等） |
+| `raw_market_data` | 原始市场数据管道（预留，当前一键采集跳过此表） |
+
+## 已知限制 / 待办
+
+| 问题 | 状态 |
+|---|---|
+| 资金、板块、基本面数据尚未接入 | 未开始 |
+| 事件数据尚未接入 | 未开始 |
+| 分笔/Level2/盘口数据 | 未开始 |
+| `datetime.utcnow()` 废弃警告 → 改为 `datetime.now(UTC)` | 未处理 |
+| FastAPI `@app.on_event` 废弃 → 改为 lifespan | 未处理 |
+| K线图表未在前端展示 | 未开始 |
+| 生产 PostgreSQL 切换 | 简单（改 .env 的 DATABASE_URL）|

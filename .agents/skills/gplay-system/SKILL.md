@@ -54,13 +54,14 @@ Keep only one top-level skill: `gplay-system`.
 
 Use future subskills for repeated areas, for example:
 
-| Future subskill | When to create |
-|---|---|
-| `subskills/frontend-workflow` | Repeated frontend layout, build, route, component, or UI validation rules appear |
-| `subskills/backend-workflow` | Backend service, API, database, auth, restart, or logging patterns become clear |
-| `subskills/feature-prd-to-code` | Requirements repeatedly need PM-style analysis before implementation |
-| `subskills/validation-gate` | Build/test/restart/review checks become stable |
-| `subskills/release-handoff` | Delivery notes, deployment, changelog, or packaging rules become repeated |
+| subskill | 创建时间 | 何时使用 |
+|---|---|---|
+| `subskills/dev-server-workflow` | 已创建 | 前后端启动/重启/构建/验证/播种 |
+| `subskills/frontend-workflow` | 待创建 | 前端布局、组件、样式规则重复出现 |
+| `subskills/backend-workflow` | 待创建 | 后端 API、数据库、业务逻辑模式变清晰 |
+| `subskills/feature-prd-to-code` | 待创建 | 需求需要 PM 式分析再实施 |
+| `subskills/validation-gate` | 待创建 | 构建/测试/重启/审查检查稳定 |
+| `subskills/release-handoff` | 待创建 | 交付记录、部署、更新日志规则重复 |
 
 Do not create a subskill from one isolated task. First capture the finding in `references/project-standards.md`; promote it to a subskill after it proves reusable.
 
@@ -81,4 +82,5 @@ Before saying work is complete:
 - Read `references/project-standards.md` for accumulated GPlay project facts and standards.
 - Read `references/subskill-standard.md` before creating or updating a subskill.
 - Read `references/usage-guide.md` when the user asks how to use this system skill.
+- Read `subskills/dev-server-workflow/SKILL.md` for local dev server start/restart/build workflow.
 - Run `scripts/audit_gplay_skill.py` before handoff after editing this skill.

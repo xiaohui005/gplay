@@ -16,6 +16,22 @@ export default function SearchPage() {
   const [collecting, setCollecting] = useState(false)
   const [collectMsg, setCollectMsg] = useState('')
 
+  const doSearch = useCallback(async (kw: string) => {
+    if (!kw.trim()) {
+      setItems([])
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await searchStocks(kw)
+      setItems(res.items)
+    } catch {
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const handleCollect = useCallback(async () => {
     if (!isStockCode(keyword.trim())) return
     setCollecting(true)
@@ -32,22 +48,6 @@ export default function SearchPage() {
       setCollecting(false)
     }
   }, [keyword, doSearch])
-
-  const doSearch = useCallback(async (kw: string) => {
-    if (!kw.trim()) {
-      setItems([])
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await searchStocks(kw)
-      setItems(res.items)
-    } catch {
-      setItems([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   useEffect(() => {
     clearTimeout(timer.current)
