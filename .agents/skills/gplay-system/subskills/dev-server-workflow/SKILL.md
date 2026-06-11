@@ -14,6 +14,7 @@ Use when:
 - 修改前端代码后确认是否只需要 HMR 而非重启
 - 前后端联调时端口冲突或代理不生效
 - 交付前需要构建验证
+- 需要用后端 `8008` 直接访问前端生产包，避免常开 Vite `5173`
 - 种子数据变动后需要重新播种
 - 前后端进程意外退出需要排查和恢复
 
@@ -26,8 +27,9 @@ Use when:
 | 后端 API 路由/处理器 | ✅ | ❌（Vite proxy 自动转发） | ❌ |
 | 数据库模型/SQL | ✅ | ❌ | 视情况 |
 | 后端服务/依赖注入 | ✅ | ❌ | ❌ |
-| 前端页面组件 | ❌（HMR 自动生效） | ❌（HMR 自动生效） | ❌ |
-| 前端路由 | ❌（HMR 自动生效） | ❌ | ❌ |
+| 前端页面组件（开发模式） | ❌（HMR 自动生效） | ❌（HMR 自动生效） | ❌ |
+| 前端路由（开发模式） | ❌（HMR 自动生效） | ❌ | ❌ |
+| 前端页面/路由（8008 生产托管） | ✅（重启后端读取新 dist） | ❌ | ❌ |
 | `vite.config.ts` | ❌ | ✅ | ❌ |
 | 前端依赖 | ❌ | ✅（需重跑 `npm install`） | ❌ |
 | 种子数据 | ✅ | ❌ | ✅ |
@@ -64,6 +66,28 @@ netstat -ano | Select-String ":8008.*LISTEN"
 netstat -ano | Select-String ":5173.*LISTEN"
 curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8008/
 curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:5173/
+```
+
+#### 2d. 用 8008 直接托管前端生产包（推荐给日常使用）
+
+```powershell
+# 先构建前端产物
+cd D:\gongju\gplay\frontend
+npm run build
+
+# 再启动或重启后端
+cd D:\gongju\gplay\server
+python -m uvicorn src.main:app --port 8008
+```
+
+访问方式：
+
+| 地址 | 用途 |
+|---|---|
+| `http://127.0.0.1:8008/` | 前端生产页面 |
+| `http://127.0.0.1:8008/analysis/history?symbol=000338` | React Router 深链接 |
+| `http://127.0.0.1:8008/api` | 后端服务信息 |
+| `http://127.0.0.1:8008/api/stocks/search?keyword=000338` | 后端 API |
 
 ### 3. 重启后端
 
@@ -82,7 +106,13 @@ Start-Sleep 3; curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8008/
 
 ```powershell
 # 验证后端存活
-python -c "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8008/', timeout=5); print(r.status, r.read()[:200].decode())"
+python -c "import urllib.request,json; d=json.loads(urllib.request.urlopen('http://127.0.0.1:8008/health', timeout=5).read()); print(d['status'])"
+
+# 验证 8008 返回前端生产 HTML
+python -c "import urllib.request; data=urllib.request.urlopen('http://127.0.0.1:8008/', timeout=5).read().decode('utf-8'); print('root' in data and 'assets/' in data)"
+
+# 验证 React Router 深链接回退到前端 HTML
+python -c "import urllib.request; data=urllib.request.urlopen('http://127.0.0.1:8008/analysis/history?symbol=000338', timeout=5).read().decode('utf-8'); print('root' in data and 'assets/' in data)"
 
 # 验证搜索接口
 python -c "import urllib.request, json; r=urllib.request.urlopen('http://127.0.0.1:8008/api/stocks/search?keyword=600000', timeout=5); print(json.loads(r.read())['items'][0]['name'])"
@@ -161,7 +191,9 @@ python -c "import urllib.request, json; r=urllib.request.urlopen('http://127.0.0
 
 ## 验收标准
 
-- [ ] 后端启动后在 `http://127.0.0.1:8008/` 返回 JSON（含 `status: "ok"`）
+- [ ] 后端启动后在 `http://127.0.0.1:8008/health` 返回 JSON（含 `status: "ok"`）
+- [ ] 执行 `npm run build` 后，`http://127.0.0.1:8008/` 返回前端生产页面
+- [ ] `http://127.0.0.1:8008/analysis/history?symbol=000338` 能返回前端 HTML（深链接可用）
 - [ ] 搜索接口返回正确股票列表
 - [ ] 研判接口返回评分、建议、大师详情、条件、买卖计划
 - [ ] 一键采集接口返回 `status: "ok"` + 股价信息
@@ -186,6 +218,18 @@ taskkill /F /PID <PID>
 原因：Vite dev server 先于后端启动，或后端重启后端口变了。
 
 解决：确保后端先启动，或重启 Vite 进程。
+
+### 8008 打开后提示前端 dist 不存在
+
+原因：后端已启动，但 `frontend/dist/index.html` 尚未生成。
+
+解决：在 `frontend/` 运行 `npm run build`，然后重启后端。
+
+### 8008 深链接 404
+
+原因：后端没有把非 `/api/*` 路径回退到 `frontend/dist/index.html`，或后端尚未重启到最新代码。
+
+解决：确认 `server/src/main.py` 中有 SPA fallback，并重启后端。
 
 ### Python 模块找不到
 
