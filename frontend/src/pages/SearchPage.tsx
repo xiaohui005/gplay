@@ -12,7 +12,7 @@ export default function SearchPage() {
   const [items, setItems] = useState<StockItem[]>([])
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [collecting, setCollecting] = useState(false)
   const [collectMsg, setCollectMsg] = useState('')
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])

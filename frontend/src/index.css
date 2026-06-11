@@ -1,3 +1,5 @@
+@import './styles/technical-analysis.css';
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -220,3 +222,5 @@ h3 { font-size: 1.05rem; margin-bottom: 8px; color: #555; }
 .news-meta { display: flex; gap: 12px; margin-top: 4px; font-size: 0.8rem; }
 .news-source { color: #1976d2; }
 .news-time { color: #999; }
+
+

@@ -146,6 +146,88 @@ export interface TSignals {
   sellConditions: string[]
 }
 
+export interface TechnicalIndicators {
+  trend: {
+    maAlignment: string
+    maCross: string
+    ma5: number | null
+    ma10: number | null
+    ma20: number | null
+    detail: string
+  }
+  momentum: {
+    macd: {
+      dif: number
+      dea: number
+      histogram: number
+      direction: string
+      status: string
+      detail: string
+    }
+    rsi: {
+      value: number
+      status: string
+      detail: string
+    }
+  }
+  volatility: {
+    position: string
+    upper: number
+    middle: number
+    lower: number
+    width: number
+    detail: string
+  }
+  volume: {
+    volumeRatio: number
+    volumeTrend: string
+    priceVolumeConfirm: boolean
+    detail: string
+  }
+  supportResistance: {
+    nearestSupport: number
+    nearestResistance: number
+    distanceToSupport: number
+    distanceToResistance: number
+    detail: string
+  }
+}
+
+export interface TechnicalAnalysisResult {
+  id: number
+  symbol: string
+  name: string
+  createdAt: string
+  priceAtAnalysis: number
+  direction: string
+  confidence: number
+  recommendation: string
+  signals: {
+    buyPrice: number
+    sellPrice: number
+    stopLoss: number
+  }
+  indicators: TechnicalIndicators
+  summary: string
+  keyEvidence: string[]
+  riskWarning: string[]
+  isCorrect: boolean | null
+  actualDirection: string | null
+}
+
+export interface AnalysisHistoryResponse {
+  items: TechnicalAnalysisResult[]
+  total: number
+  page: number
+  limit: number
+  stats: {
+    totalRecords: number
+    verifiedCount: number
+    correctCount: number
+    accuracy: number | null
+  }
+}
+
 export interface KlineBar {
   tradeDate: string
   open: number

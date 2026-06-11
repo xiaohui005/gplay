@@ -8,6 +8,7 @@ from src.analysis.strategy_config import StrategyConfig, AnalysisResult
 from src.models.user_watchlist import UserWatchlist
 from src.models.stock_kline_daily import StockKlineDaily
 from src.models.stock_news import StockNews
+from src.models.technical_record import TechnicalRecord
 
 __all__ = [
     "DataSourceConfig",
@@ -21,4 +22,5 @@ __all__ = [
     "UserWatchlist",
     "StockKlineDaily",
     "StockNews",
+    "TechnicalRecord",
 ]

@@ -1,4 +1,4 @@
-import type { StockItem, StockQuote, AnalysisResult, WatchlistItem, TAnalysisResult, KlineBar, NewsItem } from '../types/api'
+import type { StockItem, StockQuote, AnalysisResult, WatchlistItem, TAnalysisResult, KlineBar, NewsItem, TechnicalAnalysisResult, AnalysisHistoryResponse } from '../types/api'
 
 const BASE = '/api'
 
@@ -68,4 +68,16 @@ export function getKline(symbol: string, days = 60): Promise<{ symbol: string; i
 
 export function getNews(symbol: string, limit = 20): Promise<{ symbol: string; items: NewsItem[] }> {
   return get(`/stocks/${symbol}/news?limit=${limit}`)
+}
+
+export function getTechnicalAnalysis(symbol: string): Promise<TechnicalAnalysisResult> {
+  return get(`/stocks/${symbol}/technical-analysis`)
+}
+
+export function getAnalysisHistory(symbol?: string, page = 1, limit = 20): Promise<AnalysisHistoryResponse> {
+  const params = new URLSearchParams()
+  if (symbol) params.set('symbol', symbol)
+  params.set('page', String(page))
+  params.set('limit', String(limit))
+  return get(`/stocks/technical-analysis/history?${params.toString()}`)
 }

@@ -12,6 +12,7 @@ from src.handlers.admin_data_collection import router as admin_router
 from src.handlers.stock import router as stock_router
 from src.handlers.watchlist import router as watchlist_router
 from src.handlers.t_analysis import router as t_analysis_router
+from src.handlers.technical_analysis import router as technical_analysis_router
 from src.middleware.error_handler import global_exception_handler, http_exception_handler
 from src.services.task_scheduler import TaskScheduler
 from src.collectors.registry import CollectorRegistry
@@ -49,6 +50,7 @@ app.include_router(admin_router)
 app.include_router(stock_router)
 app.include_router(watchlist_router)
 app.include_router(t_analysis_router)
+app.include_router(technical_analysis_router)
 
 task_scheduler = TaskScheduler()
 

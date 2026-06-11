@@ -101,6 +101,7 @@ export default function DetailPage() {
         <button className="collect-btn" onClick={handleCollect} disabled={collecting}>
           {collecting ? '采集中...' : '刷新数据'}
         </button>
+        <button className="collect-btn" onClick={() => nav(`/analysis/${symbol}`)}>技术研判</button>
         <button className={`follow-btn ${following ? 'following' : ''}`} onClick={toggleFollow}>
           {following ? '★ 已关注' : '☆ 关注'}
         </button>
