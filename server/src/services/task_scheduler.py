@@ -1,4 +1,6 @@
+import datetime
 import logging
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -10,12 +12,18 @@ from src.services.collection_service import CollectionService
 
 logger = logging.getLogger(__name__)
 
+WEEKEND_DAYS = {5, 6}  # Saturday=5, Sunday=6
+
 
 class TaskScheduler:
     def __init__(self):
         self.scheduler = BackgroundScheduler()
         self.service = CollectionService()
         self._started = False
+
+    @staticmethod
+    def _is_weekend() -> bool:
+        return datetime.datetime.now().weekday() in WEEKEND_DAYS
 
     def start(self):
         if self._started:
@@ -134,22 +142,37 @@ class TaskScheduler:
         )
 
     def _collect_stock_basic(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 股票基础信息同步")
+            return
         logger.info("调度: 股票基础信息同步")
         self.service.create_and_run("STOCK_BASIC", trigger_type="SCHEDULED")
 
     def _collect_trade_status(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 交易状态同步")
+            return
         logger.info("调度: 交易状态同步")
         self.service.create_and_run("TRADE_STATUS", trigger_type="SCHEDULED")
 
     def _collect_quote(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 延迟行情采集")
+            return
         logger.info("调度: 延迟行情采集")
         self.service.create_and_run("QUOTE", trigger_type="SCHEDULED")
 
     def _collect_kline(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 日 K 采集")
+            return
         logger.info("调度: 日 K 采集")
         self.service.create_and_run("KLINE", trigger_type="SCHEDULED")
 
     def _collect_financial(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 财务数据采集")
+            return
         logger.info("调度: 财务数据采集")
         self.service.create_and_run("FINANCIAL", trigger_type="SCHEDULED")
 
@@ -158,10 +181,16 @@ class TaskScheduler:
         self.service.create_and_run("ANNOUNCEMENT", trigger_type="SCHEDULED")
 
     def _collect_sector(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 板块数据采集")
+            return
         logger.info("调度: 板块数据采集")
         self.service.create_and_run("SECTOR", trigger_type="SCHEDULED")
 
     def _collect_risk_events(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 风险事件采集")
+            return
         logger.info("调度: 风险事件采集")
         self.service.create_and_run("RISK", trigger_type="SCHEDULED")
 
@@ -170,6 +199,9 @@ class TaskScheduler:
         self.service.retry_failed_jobs()
 
     def _save_watchlist_technical_analysis(self):
+        if self._is_weekend():
+            logger.info("周末跳过: 技术研判自动保存")
+            return
         db = SessionLocal()
         try:
             rows = db.query(UserWatchlist).order_by(UserWatchlist.added_at.desc()).all()
