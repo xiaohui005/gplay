@@ -33,4 +33,6 @@ screenshot-*.png
 
 # SQLite database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
