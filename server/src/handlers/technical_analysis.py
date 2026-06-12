@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.analysis.technical_engine import analyze_technical
 from src.data_sources.east_money import fetch_kline
+from src.data_sources.tencent_quote import fetch_quote
 from src.db.database import get_db
 from src.models import StockBasic, TechnicalRecord, StockQuoteSnapshot
 
@@ -95,6 +96,7 @@ def _build_technical_analysis(symbol: str, basic: StockBasic):
     klines = sorted(fetch_kline(symbol, datalen=120), key=lambda k: k.get("date", ""))
     if not klines:
         raise HTTPException(status_code=400, detail=f"股票 {symbol} K线数据获取失败")
+    klines = _merge_live_quote_into_klines(symbol, klines)
 
     current_price = klines[-1].get("close") if klines[-1].get("close") is not None else None
     if current_price is None:
@@ -141,6 +143,37 @@ def _build_technical_analysis(symbol: str, basic: StockBasic):
         "analysisSession": analysis_session,
         "analysisTimeLabel": analysis_time_label,
     }
+
+
+def _merge_live_quote_into_klines(symbol: str, klines: list[dict]) -> list[dict]:
+    try:
+        quote = fetch_quote(symbol)
+    except Exception as exc:
+        logger.warning("获取实时行情失败，使用日K数据研判 [%s]: %s", symbol, exc)
+        return klines
+
+    latest_price = quote.get("latest_price")
+    quote_time = quote.get("datetime_str") or ""
+    if not latest_price or len(quote_time) < 8:
+        return klines
+
+    quote_date = datetime.datetime.strptime(quote_time[:8], "%Y%m%d").date().isoformat()
+    live_row = {
+        "date": quote_date,
+        "open": quote.get("open") or latest_price,
+        "close": latest_price,
+        "high": quote.get("high") or latest_price,
+        "low": quote.get("low") or latest_price,
+        "volume": quote.get("volume") or 0,
+        "amount": quote.get("amount"),
+    }
+
+    rows = list(klines)
+    if rows and rows[-1].get("date") == quote_date:
+        rows[-1] = {**rows[-1], **live_row}
+    else:
+        rows.append(live_row)
+    return sorted(rows, key=lambda k: k.get("date", ""))
 
 
 def _get_analysis_session(now: datetime.datetime):

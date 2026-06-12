@@ -137,6 +137,35 @@ def _calc_support_resistance(closes: list[float], highs: list[float], lows: list
     }
 
 
+def _calc_intraday_momentum(closes: list[float], highs: list[float], lows: list[float]) -> dict:
+    if len(closes) < 2 or not highs or not lows:
+        return {"status": "neutral", "changePercent": 0, "closePosition": 0, "detail": "日内动量数据不足"}
+    prev_close = closes[-2]
+    latest = closes[-1]
+    high = highs[-1]
+    low = lows[-1]
+    change_pct = (latest - prev_close) / prev_close * 100 if prev_close else 0
+    close_position = (latest - low) / (high - low) if high and low is not None and high > low else 0
+    if change_pct >= 9.5 and close_position >= 0.85:
+        status = "limit_up"
+        detail = f"接近涨停强动量，涨幅 {change_pct:.2f}%，收在日内高位"
+    elif change_pct >= 5 and close_position >= 0.75:
+        status = "strong_up"
+        detail = f"日内强势上涨，涨幅 {change_pct:.2f}%，收盘接近高位"
+    elif change_pct <= -5 and close_position <= 0.25:
+        status = "strong_down"
+        detail = f"日内弱势下跌，跌幅 {change_pct:.2f}%，收盘接近低位"
+    else:
+        status = "neutral"
+        detail = f"日内涨跌幅 {change_pct:.2f}%"
+    return {
+        "status": status,
+        "changePercent": round(change_pct, 2),
+        "closePosition": round(close_position, 2),
+        "detail": detail,
+    }
+
+
 def _calc_atr_from_data(highs: list[float], lows: list[float], closes: list[float], n: int = 14) -> float:
     trs = []
     for i in range(1, len(closes)):
@@ -208,6 +237,10 @@ def analyze_technical(klines: list[dict]) -> dict:
     sr = _calc_support_resistance(closes, highs, lows)
     sr_vote = 1 if sr["distanceToSupport"] < sr["distanceToResistance"] else (-1 if sr["distanceToResistance"] < sr["distanceToSupport"] else 0)
 
+    # Intraday momentum
+    intraday = _calc_intraday_momentum(closes, highs, lows)
+    intraday_vote = 1 if intraday["status"] in {"limit_up", "strong_up"} else (-1 if intraday["status"] == "strong_down" else 0)
+
     # Composite scoring
     w_trend = trend_vote * 3
     w_macd = macd_vote * 1.5
@@ -215,9 +248,10 @@ def analyze_technical(klines: list[dict]) -> dict:
     w_bb = bb_vote * 1
     w_vol = vol_vote * 1.5
     w_sr = sr_vote * 1.5
+    w_intraday = intraday_vote * (5 if intraday["status"] == "limit_up" else 2)
 
-    total_weighted = w_trend + w_macd + w_rsi + w_bb + w_vol + w_sr
-    max_possible = 3 + 1.5 + 0.5 + 1 + 1.5 + 1.5  # = 10
+    total_weighted = w_trend + w_macd + w_rsi + w_bb + w_vol + w_sr + w_intraday
+    max_possible = 3 + 1.5 + 0.5 + 1 + 1.5 + 1.5 + 5
 
     decision = decide_direction(total_weighted, max_possible)
     direction = decision["direction"]
@@ -250,6 +284,12 @@ def analyze_technical(klines: list[dict]) -> dict:
         key_evidence.append("价量配合，放量上涨")
     elif not vol_analysis["priceVolumeConfirm"] and vol_analysis["volumeRatio"] < 0.7:
         risk_warning.append("价量背离，缩量下跌")
+    if intraday["status"] == "limit_up":
+        key_evidence.append(intraday["detail"])
+    elif intraday["status"] == "strong_up":
+        key_evidence.append(intraday["detail"])
+    elif intraday["status"] == "strong_down":
+        risk_warning.append(intraday["detail"])
 
     if not key_evidence:
         key_evidence.append("各指标信号不明确，市场方向待确认")
@@ -265,7 +305,7 @@ def analyze_technical(klines: list[dict]) -> dict:
         summary_parts.append("多项指标共振偏空" if total_weighted < -4 else "部分指标偏空，但信号强度一般")
     else:
         summary_parts.append("多空力量接近，按当前权重给出方向判断")
-    summary_parts.append(f"趋势{trend_detail}，{macd['detail']}，{rsi['detail']}，{bb['detail']}，{vol_analysis['detail']}")
+    summary_parts.append(f"趋势{trend_detail}，{macd['detail']}，{rsi['detail']}，{bb['detail']}，{vol_analysis['detail']}，{intraday['detail']}")
 
     # Compute buy/sell prices based on current price + ATR, not old support/resistance
     atr_val = _calc_atr_from_data(highs, lows, closes)
@@ -321,6 +361,7 @@ def analyze_technical(klines: list[dict]) -> dict:
                 "volatility": bb,
                 "volume": vol_analysis,
                 "supportResistance": sr,
+                "intradayMomentum": intraday,
             },
         },
     )

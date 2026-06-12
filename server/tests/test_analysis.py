@@ -39,7 +39,7 @@ from src.analysis.risk_control import (
     SUGGESTION_HOLD,
 )
 from src.analysis.suggestion import map_suggestion
-from src.analysis.technical_engine import apply_confidence_floor, decide_direction
+from src.analysis.technical_engine import analyze_technical, apply_confidence_floor, decide_direction
 from src.db.database import SessionLocal, engine, Base
 from src.handlers.technical_analysis import evaluate_prediction, normalize_prediction_result, select_validation_price, select_intraday_validation_price
 
@@ -62,6 +62,27 @@ def test_low_confidence_direction_stays_directional():
 def test_neutral_weight_still_returns_direct_up_or_down_direction():
     assert decide_direction(0, 10)["direction"] == "UP"
     assert decide_direction(-0.1, 10)["direction"] == "DOWN"
+
+
+def test_limit_up_momentum_overrides_lagging_bearish_indicators():
+    closes = [22.5, 22.2, 21.9, 21.5, 21.1, 20.8, 20.4, 20.1, 19.8, 19.5, 19.2, 18.9, 18.6, 18.4, 18.1, 17.9, 17.7, 17.5, 17.3, 17.1, 16.9, 16.8, 16.7, 16.6, 16.7, 16.8, 16.9, 17.0, 17.37, 19.11]
+    klines = [
+        {
+            "date": f"2026-05-{index + 1:02d}",
+            "open": close * 0.99,
+            "close": close,
+            "high": close * 1.002,
+            "low": close * 0.98,
+            "volume": 100000000 + index * 1000000,
+        }
+        for index, close in enumerate(closes)
+    ]
+    klines[-1].update({"open": 18.36, "high": 19.11, "low": 18.0, "volume": 341000000})
+
+    result = analyze_technical(klines)
+
+    assert result["direction"] == "UP"
+    assert any("涨停" in item or "强动量" in item for item in result["keyEvidence"])
 
 
 def test_small_positive_move_counts_as_up_result():
