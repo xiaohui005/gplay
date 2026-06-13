@@ -59,6 +59,10 @@ export function collectStock(symbol: string): Promise<{ status: string; symbol: 
   return post(`/stocks/${symbol}/collect`)
 }
 
+export function collectStockNews(symbol: string): Promise<{ status: string; symbol: string; newsCount: number }> {
+  return post(`/stocks/${symbol}/collect-news`)
+}
+
 export function getWatchlist(): Promise<{ items: WatchlistItem[] }> {
   return get('/watchlist')
 }

@@ -39,6 +39,7 @@
 | GET | `/api/stocks/search?keyword=...&limit=...` | 搜索股票（代码前缀/名称模糊/拼音模糊） |
 | GET | `/api/stocks/{symbol}/analysis` | 获取完整研判结果（评分、大师建议、条件、买卖计划、复盘） |
 | POST | `/api/stocks/{symbol}/collect` | 一键采集（腾讯行情 + 东方财富K线 + 东方财富新闻），直接写入标准表 |
+| POST | `/api/stocks/{symbol}/collect-news` | 仅采集个股新闻资讯，不采集行情或K线 |
 | GET | `/api/stocks/{symbol}/quote` | 获取最新行情快照 |
 | GET | `/api/stocks/{symbol}/kline?days=60` | 获取K线数据（日K，含日期/OHLC/成交量/成交额） |
 | GET | `/api/stocks/{symbol}/news?limit=20` | 获取个股相关新闻资讯 |
@@ -69,7 +70,7 @@
 
 - `symbol` 以裸代码格式存储（如 `"000630"`），不带市场前缀，`market` 字段单独存储（`SSE`/`SZSE`/`BSE`）
 - 前端 proxy `/api` → `http://localhost:8008` 在 `vite.config.ts` 中配置
-- 一键采集端点 `POST /collect` 绕过 `raw_market_data` 管道，直接写入 `stock_basic` + `stock_quote_snapshot` 标准表
+- 一键采集端点 `POST /collect` 绕过 `raw_market_data` 管道，直接写入 `stock_basic` + `stock_quote_snapshot` 标准表；仅资讯采集使用 `POST /collect-news`，只写入 `stock_news`
 - 前端处理行情 404：显示"尚未采集" + 采集按钮
 - 前端搜索页处理未入库股票：显示"数据库中暂无该股票" + 采集按钮
 - SUSPENDED/DELISTED 股票跳过评分，直接返回 HOLD/AVOID

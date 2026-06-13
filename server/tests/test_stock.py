@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 from src.main import app
 from src.models.stock_basic import StockBasic
+from src.models.stock_kline_daily import StockKlineDaily
+from src.models.stock_news import StockNews
 from src.models.stock_quote_snapshot import StockQuoteSnapshot
 from src.db.database import SessionLocal, engine, Base
 
@@ -120,6 +122,36 @@ class TestStockQuote:
         _seed_stock_quote()
         resp = client.get("/api/stocks/999999/quote")
         assert resp.status_code == 404
+
+
+class TestStockNewsCollect:
+    def test_collect_news_only_does_not_collect_quote_or_kline(self, monkeypatch):
+        def fake_fetch_news(symbol):
+            return [{
+                "title": "浦发银行发布经营动态",
+                "source": "东方财富",
+                "publish_time": "2026-06-14 10:00:00",
+                "url": "https://example.com/news/1",
+                "content_summary": "仅用于测试的新闻摘要",
+            }]
+
+        monkeypatch.setattr("src.handlers.stock.fetch_news", fake_fetch_news)
+
+        resp = client.post("/api/stocks/600000/collect-news")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["symbol"] == "600000"
+        assert data["newsCount"] == 1
+
+        session = SessionLocal()
+        try:
+            assert session.query(StockNews).filter(StockNews.symbol == "600000").count() == 1
+            assert session.query(StockQuoteSnapshot).filter(StockQuoteSnapshot.symbol == "600000").count() == 0
+            assert session.query(StockKlineDaily).filter(StockKlineDaily.symbol == "600000").count() == 0
+        finally:
+            session.close()
 
 
 class TestStockAnalysis:

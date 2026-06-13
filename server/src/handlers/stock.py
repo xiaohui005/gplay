@@ -80,29 +80,7 @@ def collect_stock(symbol: str, db: Session = Depends(get_db)):
 
     news_count = 0
     try:
-        news_data = fetch_news(symbol)
-        for n in news_data:
-            pub_time = None
-            if n.get("publish_time"):
-                try:
-                    pub_time = datetime.datetime.fromisoformat(n["publish_time"].replace("T", " "))
-                except (ValueError, TypeError):
-                    pub_time = None
-            exists = db.query(StockNews).filter(
-                StockNews.symbol == symbol,
-                StockNews.title == n["title"],
-                StockNews.publish_time == pub_time,
-            ).first()
-            if not exists:
-                db.add(StockNews(
-                    symbol=symbol,
-                    title=n["title"],
-                    source=n.get("source"),
-                    publish_time=pub_time,
-                    url=n.get("url"),
-                    content_summary=n.get("content_summary"),
-                ))
-        news_count = len(news_data)
+        news_count = _collect_news(symbol, db)
     except Exception:
         pass
 
@@ -115,6 +93,17 @@ def collect_stock(symbol: str, db: Session = Depends(get_db)):
         "price": quote["latest_price"],
         "changePercent": quote["change_percent"],
         "klineBars": kline_bars,
+        "newsCount": news_count,
+    }
+
+
+@router.post("/{symbol}/collect-news")
+def collect_stock_news(symbol: str, db: Session = Depends(get_db)):
+    news_count = _collect_news(symbol, db)
+    db.commit()
+    return {
+        "status": "ok",
+        "symbol": symbol,
         "newsCount": news_count,
     }
 
@@ -161,6 +150,32 @@ def stock_news(
     service = StockService(db)
     items = service.get_news(symbol, limit)
     return {"symbol": symbol, "items": items}
+
+
+def _collect_news(symbol: str, db: Session) -> int:
+    news_data = fetch_news(symbol)
+    for n in news_data:
+        pub_time = None
+        if n.get("publish_time"):
+            try:
+                pub_time = datetime.datetime.fromisoformat(n["publish_time"].replace("T", " "))
+            except (ValueError, TypeError):
+                pub_time = None
+        exists = db.query(StockNews).filter(
+            StockNews.symbol == symbol,
+            StockNews.title == n["title"],
+            StockNews.publish_time == pub_time,
+        ).first()
+        if not exists:
+            db.add(StockNews(
+                symbol=symbol,
+                title=n["title"],
+                source=n.get("source"),
+                publish_time=pub_time,
+                url=n.get("url"),
+                content_summary=n.get("content_summary"),
+            ))
+    return len(news_data)
 
 
 def _detect_market(code: str) -> str:

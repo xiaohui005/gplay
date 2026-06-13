@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getQuote, getAnalysis, collectStock, addWatchlist, removeWatchlist, getWatchlist, getTAnalysis, getKline, getNews } from '../api/client'
+import { getQuote, getAnalysis, collectStock, collectStockNews, addWatchlist, removeWatchlist, getWatchlist, getTAnalysis, getKline, getNews } from '../api/client'
 import type { StockQuote, AnalysisResult, TAnalysisResult, KlineBar, NewsItem } from '../types/api'
 import KlineChart from '../components/KlineChart'
 
@@ -11,6 +11,7 @@ export default function DetailPage() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [collecting, setCollecting] = useState(false)
+  const [collectingNews, setCollectingNews] = useState(false)
   const [error, setError] = useState('')
   const [following, setFollowing] = useState(false)
   const [tAnalysis, setTAnalysis] = useState<TAnalysisResult | null>(null)
@@ -61,6 +62,22 @@ export default function DetailPage() {
     }
   }
 
+  const handleCollectNews = async () => {
+    if (!symbol || collectingNews) return
+    setCollectingNews(true)
+    setError('')
+    try {
+      const result = await collectStockNews(symbol)
+      const news = await getNews(symbol)
+      setNewsItems(news.items)
+      alert(`资讯采集完成: ${result.newsCount} 条`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '资讯采集失败')
+    } finally {
+      setCollectingNews(false)
+    }
+  }
+
   const handleKlineDays = useCallback((days: number) => {
     if (!symbol) return
     setKlineDays(days)
@@ -100,6 +117,9 @@ export default function DetailPage() {
         <button className="back-btn" onClick={() => nav('/')}>← 返回搜索</button>
         <button className="collect-btn" onClick={handleCollect} disabled={collecting}>
           {collecting ? '采集中...' : '刷新数据'}
+        </button>
+        <button className="collect-btn" onClick={handleCollectNews} disabled={collectingNews}>
+          {collectingNews ? '资讯采集中...' : '仅采集资讯'}
         </button>
         <button className="collect-btn" onClick={() => nav(`/analysis/${symbol}`)}>技术研判</button>
         <button className={`follow-btn ${following ? 'following' : ''}`} onClick={toggleFollow}>

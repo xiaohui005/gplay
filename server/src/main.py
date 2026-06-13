@@ -97,6 +97,7 @@ def api_info():
             "kline": "/api/stocks/{symbol}/kline?days=60",
             "news": "/api/stocks/{symbol}/news?limit=20",
             "collect": "/api/stocks/{symbol}/collect",
+            "collectNews": "/api/stocks/{symbol}/collect-news",
             "watchlist": "/api/watchlist",
             "t-analysis": "/api/stocks/{symbol}/t-analysis",
             "settings": "/api/settings/notification",
